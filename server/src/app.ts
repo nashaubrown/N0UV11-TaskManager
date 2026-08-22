@@ -6,6 +6,7 @@ import swaggerUi from 'swagger-ui-express'
 import { readFileSync } from 'node:fs'
 import { parse } from 'yaml'
 import { config } from './lib/config.js'
+import { prisma } from './lib/prisma.js'
 import { errorHandler } from './middleware/error.js'
 import { authRouter } from './routes/auth.js'
 import { projectsRouter } from './routes/projects.js'
@@ -26,7 +27,15 @@ export function createApp() {
   app.use(express.json({ limit: '2mb' }))
   app.use(rateLimit({ windowMs: 60_000, limit: 300, standardHeaders: true, legacyHeaders: false }))
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, env: config.env }))
+  app.get('/api/health', async (_req, res) => {
+    let db = 'ok'
+    try {
+      await prisma.$queryRaw`SELECT 1`
+    } catch {
+      db = 'unreachable — check that PostgreSQL is running and DATABASE_URL in server/.env is correct'
+    }
+    res.status(db === 'ok' ? 200 : 503).json({ ok: db === 'ok', env: config.env, database: db })
+  })
 
   app.use('/api/auth', authRouter)
   app.use('/api/projects', projectsRouter)
