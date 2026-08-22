@@ -1,0 +1,552 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model approval_decisions {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id        String            @db.Uuid
+  step_no           Int
+  action            approval_action
+  actor_id          String?           @db.Uuid
+  guest_name        String?
+  feedback          String?
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  users             users?            @relation(fields: [actor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approval_requests approval_requests @relation(fields: [request_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model approval_requests {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  photo_id           String               @db.Uuid
+  workflow_id        String?              @db.Uuid
+  status             approval_status      @default(pending)
+  current_step       Int                  @default(1)
+  requested_by       String?              @db.Uuid
+  created_at         DateTime             @default(now()) @db.Timestamptz(6)
+  resolved_at        DateTime?            @db.Timestamptz(6)
+  approval_decisions approval_decisions[]
+  photos             photos               @relation(fields: [photo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users              users?               @relation(fields: [requested_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approval_workflows approval_workflows?  @relation(fields: [workflow_id], references: [id], onUpdate: NoAction)
+
+  @@index([photo_id], map: "idx_approvals_photo")
+}
+
+model approval_workflow_steps {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflow_id        String             @db.Uuid
+  step_no            Int
+  name               String
+  approver_id        String?            @db.Uuid
+  users              users?             @relation(fields: [approver_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approval_workflows approval_workflows @relation(fields: [workflow_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([workflow_id, step_no])
+}
+
+model approval_workflows {
+  id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id         String                    @db.Uuid
+  name                    String
+  description             String?
+  created_by              String?                   @db.Uuid
+  created_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  approval_requests       approval_requests[]
+  approval_workflow_steps approval_workflow_steps[]
+  users                   users?                    @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organizations           organizations             @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model audit_log {
+  id              BigInt         @id @default(autoincrement())
+  organization_id String?        @db.Uuid
+  actor_id        String?        @db.Uuid
+  guest_label     String?
+  action          String
+  entity_type     String
+  entity_id       String?        @db.Uuid
+  detail          Json           @default("{}")
+  ip_address      String?        @db.Inet
+  created_at      DateTime       @default(now()) @db.Timestamptz(6)
+  users           users?         @relation(fields: [actor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organizations   organizations? @relation(fields: [organization_id], references: [id], onUpdate: NoAction)
+
+  @@index([organization_id, created_at(sort: Desc)], map: "idx_audit_org_time")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model comments {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  photo_id       String?    @db.Uuid
+  task_id        String?    @db.Uuid
+  parent_id      String?    @db.Uuid
+  author_id      String?    @db.Uuid
+  guest_name     String?
+  body           String
+  pin_x          Float?     @db.Real
+  pin_y          Float?     @db.Real
+  resolved_at    DateTime?  @db.Timestamptz(6)
+  created_at     DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime   @default(now()) @db.Timestamptz(6)
+  users          users?     @relation(fields: [author_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  comments       comments?  @relation("commentsTocomments", fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_comments comments[] @relation("commentsTocomments")
+  photos         photos?    @relation(fields: [photo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks          tasks?     @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([photo_id], map: "idx_comments_photo")
+  @@index([task_id], map: "idx_comments_task")
+}
+
+model contacts {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String        @db.Uuid
+  full_name       String
+  email           String?       @db.Citext
+  phone           String?
+  company         String?
+  notes           String?
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime      @default(now()) @db.Timestamptz(6)
+  organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  deals           deals[]
+  merchants       merchants[]
+}
+
+model deal_photos {
+  deal_id  String @db.Uuid
+  photo_id String @db.Uuid
+  deals    deals  @relation(fields: [deal_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  photos   photos @relation(fields: [photo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([deal_id, photo_id])
+}
+
+model deal_tasks {
+  deal_id String @db.Uuid
+  task_id String @db.Uuid
+  deals   deals  @relation(fields: [deal_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks   tasks  @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([deal_id, task_id])
+}
+
+model deals {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String        @db.Uuid
+  contact_id      String?       @db.Uuid
+  name            String
+  stage           deal_stage    @default(lead)
+  value_cents     BigInt?
+  currency        String        @default("USD")
+  owner_id        String?       @db.Uuid
+  expected_close  DateTime?     @db.Date
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime      @default(now()) @db.Timestamptz(6)
+  deal_photos     deal_photos[]
+  deal_tasks      deal_tasks[]
+  contacts        contacts?     @relation(fields: [contact_id], references: [id], onUpdate: NoAction)
+  organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users           users?        @relation(fields: [owner_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organization_id, stage], map: "idx_deals_org_stage")
+}
+
+model gcal_connections {
+  user_id        String    @id @db.Uuid
+  google_email   String    @db.Citext
+  access_token   String
+  refresh_token  String
+  token_expires  DateTime  @db.Timestamptz(6)
+  calendar_id    String    @default("primary")
+  connected_at   DateTime  @default(now()) @db.Timestamptz(6)
+  last_synced_at DateTime? @db.Timestamptz(6)
+  users          users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model gcal_sync_queue {
+  id           BigInt         @id @default(autoincrement())
+  task_id      String         @db.Uuid
+  user_id      String         @db.Uuid
+  operation    sync_operation
+  status       sync_status    @default(queued)
+  attempts     Int            @default(0)
+  last_error   String?
+  created_at   DateTime       @default(now()) @db.Timestamptz(6)
+  processed_at DateTime?      @db.Timestamptz(6)
+  tasks        tasks          @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        users          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model merchants {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String        @db.Uuid
+  name            String
+  location        String?
+  contact_id      String?       @db.Uuid
+  logo_url        String?
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime      @default(now()) @db.Timestamptz(6)
+  contacts        contacts?     @relation(fields: [contact_id], references: [id], onUpdate: NoAction, map: "merchants_contact_fk")
+  organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  photos          photos[]
+
+  @@unique([organization_id, name])
+}
+
+model notifications {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  kind       String
+  payload    Json      @default("{}")
+  read_at    DateTime? @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model organization_members {
+  organization_id                              String        @db.Uuid
+  user_id                                      String        @db.Uuid
+  role                                         user_role     @default(member)
+  invited_by                                   String?       @db.Uuid
+  joined_at                                    DateTime      @default(now()) @db.Timestamptz(6)
+  users_organization_members_invited_byTousers users?        @relation("organization_members_invited_byTousers", fields: [invited_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organizations                                organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_organization_members_user_idTousers    users         @relation("organization_members_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([organization_id, user_id])
+}
+
+model organizations {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String
+  slug                 String                 @unique
+  logo_url             String?
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  approval_workflows   approval_workflows[]
+  audit_log            audit_log[]
+  contacts             contacts[]
+  deals                deals[]
+  merchants            merchants[]
+  organization_members organization_members[]
+  photos               photos[]
+  projects             projects[]
+  share_links          share_links[]
+  task_labels          task_labels[]
+  tasks                tasks[]
+  teams                teams[]
+}
+
+model photo_ai_metadata {
+  photo_id       String   @id @db.Uuid
+  objects        Json     @default("[]")
+  ocr_text       String?
+  classification String?
+  quality_issues Json     @default("[]")
+  raw_response   Json?
+  model          String?
+  processed_at   DateTime @default(now()) @db.Timestamptz(6)
+  photos         photos   @relation(fields: [photo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model photo_tags {
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  photo_id   String         @db.Uuid
+  tag        String
+  source     String         @default("user")
+  ai_status  ai_tag_status?
+  confidence Float?         @db.Real
+  created_by String?        @db.Uuid
+  created_at DateTime       @default(now()) @db.Timestamptz(6)
+  users      users?         @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  photos     photos         @relation(fields: [photo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([photo_id, tag, source])
+  @@index([tag(ops: raw("gin_trgm_ops"))], map: "idx_photo_tags_tag_trgm", type: Gin)
+}
+
+model photo_versions {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  photo_id   String   @db.Uuid
+  version_no Int
+  s3_key     String
+  size_bytes BigInt
+  created_by String?  @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  note       String?
+  users      users?   @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  photos     photos   @relation(fields: [photo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([photo_id, version_no])
+}
+
+model photos {
+  id                                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                          String              @db.Uuid
+  project_id                               String?             @db.Uuid
+  merchant_id                              String?             @db.Uuid
+  uploaded_by                              String?             @db.Uuid
+  status                                   photo_status        @default(processing)
+  title                                    String?
+  description                              String?
+  s3_key                                   String
+  thumb_s3_key                             String?
+  content_type                             String
+  size_bytes                               BigInt
+  width_px                                 Int?
+  height_px                                Int?
+  captured_at                              DateTime?           @db.Timestamptz(6)
+  device_model                             String?
+  gps_lat                                  Float?
+  gps_lng                                  Float?
+  created_at                               DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at                               DateTime            @default(now()) @db.Timestamptz(6)
+  deleted_at                               DateTime?           @db.Timestamptz(6)
+  approval_requests                        approval_requests[]
+  comments                                 comments[]
+  deal_photos                              deal_photos[]
+  photo_ai_metadata                        photo_ai_metadata?
+  photo_tags                               photo_tags[]
+  photo_versions                           photo_versions[]
+  merchants                                merchants?          @relation(fields: [merchant_id], references: [id], onUpdate: NoAction)
+  organizations                            organizations       @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  projects_photos_project_idToprojects     projects?           @relation("photos_project_idToprojects", fields: [project_id], references: [id], onUpdate: NoAction)
+  users                                    users?              @relation(fields: [uploaded_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  projects_projects_cover_photo_idTophotos projects[]          @relation("projects_cover_photo_idTophotos")
+}
+
+model projects {
+  id                                     String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                        String        @db.Uuid
+  name                                   String
+  description                            String?
+  cover_photo_id                         String?       @db.Uuid
+  archived                               Boolean       @default(false)
+  created_by                             String?       @db.Uuid
+  created_at                             DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at                             DateTime      @default(now()) @db.Timestamptz(6)
+  photos_photos_project_idToprojects     photos[]      @relation("photos_project_idToprojects")
+  photos_projects_cover_photo_idTophotos photos?       @relation("projects_cover_photo_idTophotos", fields: [cover_photo_id], references: [id], onUpdate: NoAction, map: "projects_cover_photo_fk")
+  users                                  users?        @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organizations                          organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  share_links                            share_links[]
+  tasks                                  tasks[]
+}
+
+model refresh_tokens {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  token_hash String    @unique
+  expires_at DateTime  @db.Timestamptz(6)
+  revoked_at DateTime? @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model share_links {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String        @db.Uuid
+  project_id      String?       @db.Uuid
+  token_hash      String        @unique
+  label           String?
+  can_comment     Boolean       @default(true)
+  can_approve     Boolean       @default(true)
+  expires_at      DateTime?     @db.Timestamptz(6)
+  revoked_at      DateTime?     @db.Timestamptz(6)
+  created_by      String?       @db.Uuid
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  users           users?        @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  projects        projects?     @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model task_assignees {
+  task_id String @db.Uuid
+  user_id String @db.Uuid
+  tasks   tasks  @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users   users  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([task_id, user_id])
+}
+
+model task_label_links {
+  task_id     String      @db.Uuid
+  label_id    String      @db.Uuid
+  task_labels task_labels @relation(fields: [label_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks       tasks       @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([task_id, label_id])
+}
+
+model task_labels {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String             @db.Uuid
+  name             String
+  color            String
+  task_label_links task_label_links[]
+  organizations    organizations      @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organization_id, name])
+}
+
+model tasks {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String             @db.Uuid
+  project_id       String?            @db.Uuid
+  parent_task_id   String?            @db.Uuid
+  title            String
+  description      String?
+  status           task_status        @default(todo)
+  priority         task_priority      @default(medium)
+  due_at           DateTime?          @db.Timestamptz(6)
+  completed_at     DateTime?          @db.Timestamptz(6)
+  position         Int                @default(0)
+  created_by       String?            @db.Uuid
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
+  gcal_event_id    String?
+  gcal_synced_at   DateTime?          @db.Timestamptz(6)
+  comments         comments[]
+  deal_tasks       deal_tasks[]
+  gcal_sync_queue  gcal_sync_queue[]
+  task_assignees   task_assignees[]
+  task_label_links task_label_links[]
+  users            users?             @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organizations    organizations      @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks            tasks?             @relation("tasksTotasks", fields: [parent_task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_tasks      tasks[]            @relation("tasksTotasks")
+  projects         projects?          @relation(fields: [project_id], references: [id], onUpdate: NoAction)
+
+  @@index([parent_task_id], map: "idx_tasks_parent")
+  @@index([project_id], map: "idx_tasks_project")
+  @@index([title(ops: raw("gin_trgm_ops"))], map: "idx_tasks_title_trgm", type: Gin)
+}
+
+model team_members {
+  team_id String @db.Uuid
+  user_id String @db.Uuid
+  teams   teams  @relation(fields: [team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users   users  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([team_id, user_id])
+}
+
+model teams {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String         @db.Uuid
+  name            String
+  color           String?
+  created_at      DateTime       @default(now()) @db.Timestamptz(6)
+  team_members    team_members[]
+  organizations   organizations  @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model users {
+  id                                                          String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                                                       String                    @unique @db.Citext
+  password_hash                                               String?
+  full_name                                                   String
+  avatar_url                                                  String?
+  created_at                                                  DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at                                                  DateTime                  @default(now()) @db.Timestamptz(6)
+  approval_decisions                                          approval_decisions[]
+  approval_requests                                           approval_requests[]
+  approval_workflow_steps                                     approval_workflow_steps[]
+  approval_workflows                                          approval_workflows[]
+  audit_log                                                   audit_log[]
+  comments                                                    comments[]
+  deals                                                       deals[]
+  gcal_connections                                            gcal_connections?
+  gcal_sync_queue                                             gcal_sync_queue[]
+  notifications                                               notifications[]
+  organization_members_organization_members_invited_byTousers organization_members[]    @relation("organization_members_invited_byTousers")
+  organization_members_organization_members_user_idTousers    organization_members[]    @relation("organization_members_user_idTousers")
+  photo_tags                                                  photo_tags[]
+  photo_versions                                              photo_versions[]
+  photos                                                      photos[]
+  projects                                                    projects[]
+  refresh_tokens                                              refresh_tokens[]
+  share_links                                                 share_links[]
+  task_assignees                                              task_assignees[]
+  tasks                                                       tasks[]
+  team_members                                                team_members[]
+}
+
+enum ai_tag_status {
+  suggested
+  accepted
+  rejected
+}
+
+enum approval_action {
+  approve
+  reject
+  request_changes
+  comment
+}
+
+enum approval_status {
+  draft
+  pending
+  in_review
+  approved
+  rejected
+  changes_requested
+}
+
+enum deal_stage {
+  lead
+  qualified
+  proposal
+  negotiation
+  closed_won
+  closed_lost
+}
+
+enum photo_status {
+  processing
+  ready
+  failed
+}
+
+enum sync_operation {
+  create
+  update
+  delete
+}
+
+enum sync_status {
+  queued
+  in_flight
+  done
+  error
+}
+
+enum task_priority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum task_status {
+  todo
+  in_progress
+  in_review
+  completed
+  cancelled
+}
+
+enum user_role {
+  owner
+  admin
+  manager
+  member
+  viewer
+}

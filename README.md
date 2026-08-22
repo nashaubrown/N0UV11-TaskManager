@@ -9,18 +9,37 @@ backend (Phase 2), PostgreSQL, AWS S3, installable PWA (Phase 3).
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Design system, component library, layouts, pages | ✅ Done |
-| 2 | Express API, auth, Google Calendar sync | ⏳ Next |
-| 3 | PWA — offline, camera, push | — |
+| 2 | Express API, auth, Google Calendar sync | ✅ Done |
+| 3 | PWA — offline, camera, push | ⏳ Next |
 | 4 | Claude Vision auto-tagging | — |
 | 5 | Client approval portal | — |
 
 ## Quick start
+
+**Frontend**
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # production build to dist/
 ```
+
+**Backend** (requires PostgreSQL 15+)
+
+```bash
+cd server
+npm install
+cp .env.example .env             # set DATABASE_URL
+createdb nouvii                  # or use an existing database
+npm run db:apply                 # applies ../database-schema.sql
+npm run db:pull && npm run db:generate   # Prisma introspects the schema
+npm run db:seed                  # demo org — login nashaubrown@gmail.com / nouvii123
+npm run dev                      # API on http://localhost:4000
+```
+
+- Swagger docs: http://localhost:4000/api/docs
+- WebSocket events: `ws://localhost:4000/ws?token=<accessToken>`
+- Smoke tests: `node server/smoke.test.mjs` (39 checks; server must be running)
 
 Open **/styleguide** in the app for the living component catalog (all variants and
 states — flip the header theme toggle to QA dark mode).
@@ -38,8 +57,19 @@ states — flip the header theme toggle to QA dark mode).
 ## Project structure
 
 ```
-database-schema.sql        PostgreSQL schema (source of truth for types)
+database-schema.sql        PostgreSQL schema (source of truth — Prisma introspects it)
 database-architecture.md   Schema guide & operational notes
+server/
+  src/
+    routes/    auth, projects, tasks, photos, uploads, approvals,
+               merchants, crm (contacts+deals), org (members+audit), calendar
+    middleware/ auth (JWT + roles), validate (zod), error handler
+    services/  storage (S3 presign / local dev driver), gcal (OAuth + outbox
+               sync worker), audit
+    ws/        org-scoped WebSocket hub (tasks/photos/comments/approvals/presence)
+    types/     zod DTOs
+  prisma/      introspected schema + seed
+  openapi.yaml API reference (served at /api/docs)
 src/
   components/
     common/    Button, Badge, Card, Avatar, Modal, Input/Select/Textarea,

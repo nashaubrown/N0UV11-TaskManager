@@ -1,0 +1,193 @@
+openapi: 3.0.3
+info:
+  title: NOUVII API
+  version: 0.2.0
+  description: >
+    Task Manager & Photo Library backend. All routes are under /api.
+    Authenticate with `Authorization: Bearer <accessToken>`; obtain tokens via
+    /auth/signup or /auth/login and rotate with /auth/refresh. Real-time events
+    stream over WebSocket at /ws?token=<accessToken>.
+servers:
+  - url: http://localhost:4000/api
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    limit: { name: limit, in: query, schema: { type: integer, default: 25, maximum: 100 } }
+    offset: { name: offset, in: query, schema: { type: integer, default: 0 } }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+    Tokens:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresInSec: { type: integer }
+    Task:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        status: { type: string, enum: [todo, in_progress, in_review, completed, cancelled] }
+        priority: { type: string, enum: [low, medium, high, urgent] }
+        projectId: { type: string, format: uuid, nullable: true }
+        dueAt: { type: string, format: date-time, nullable: true }
+        assignees: { type: array, items: { $ref: '#/components/schemas/User' } }
+        commentCount: { type: integer }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        fullName: { type: string }
+    Photo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, nullable: true }
+        url: { type: string }
+        thumbUrl: { type: string }
+        merchantId: { type: string, format: uuid, nullable: true }
+        projectId: { type: string, format: uuid, nullable: true }
+        approvalStatus: { type: string, nullable: true, enum: [draft, pending, in_review, approved, rejected, changes_requested] }
+        tags: { type: array, items: { type: object, properties: { tag: { type: string }, source: { type: string } } } }
+paths:
+  /auth/signup:
+    post:
+      security: []
+      summary: Create account + organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, fullName, organizationName]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                fullName: { type: string }
+                organizationName: { type: string }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Tokens' } } } }
+  /auth/login:
+    post: { security: [], summary: Log in, responses: { '200': { description: Tokens } } }
+  /auth/refresh:
+    post: { security: [], summary: Rotate refresh token, responses: { '200': { description: New tokens } } }
+  /auth/logout:
+    post: { security: [], summary: Revoke refresh token, responses: { '204': { description: Revoked } } }
+  /auth/me:
+    get: { summary: Current user + role, responses: { '200': { description: Profile } } }
+  /projects:
+    get:
+      summary: List projects with live task/photo counts
+      parameters: [{ $ref: '#/components/parameters/limit' }, { $ref: '#/components/parameters/offset' }]
+      responses: { '200': { description: Paged projects } }
+    post: { summary: Create project, responses: { '201': { description: Created } } }
+  /projects/{id}:
+    get: { summary: Project detail, responses: { '200': { description: Project } } }
+    patch: { summary: Update / archive, responses: { '200': { description: Updated } } }
+    delete: { summary: Delete project, responses: { '204': { description: Deleted } } }
+  /tasks:
+    get:
+      summary: List/search tasks
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: Title search }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: priority, in: query, schema: { type: string } }
+        - { name: projectId, in: query, schema: { type: string } }
+        - { name: assigneeId, in: query, schema: { type: string } }
+        - { name: dueBefore, in: query, schema: { type: string, format: date-time } }
+        - { name: sort, in: query, schema: { type: string, enum: [created, due] } }
+        - { $ref: '#/components/parameters/limit' }
+        - { $ref: '#/components/parameters/offset' }
+      responses:
+        '200': { description: Paged tasks, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/Task' } }, total: { type: integer } } } } } }
+    post: { summary: Create task (assignees, project, due date), responses: { '201': { description: Created } } }
+  /tasks/bulk-status:
+    post: { summary: Bulk status change, responses: { '200': { description: '{updated: n}' } } }
+  /tasks/{id}:
+    get: { summary: Task detail + sub-tasks, responses: { '200': { description: Task } } }
+    patch: { summary: Update task (syncs Google Calendar when connected), responses: { '200': { description: Updated } } }
+    delete: { summary: Delete task, responses: { '204': { description: Deleted } } }
+  /tasks/{id}/comments:
+    get: { summary: Threaded comments, responses: { '200': { description: Comments } } }
+    post: { summary: Add comment/reply, responses: { '201': { description: Created } } }
+  /uploads/presign:
+    post:
+      summary: Get a presigned upload target (S3 or local dev driver)
+      responses: { '200': { description: '{key, uploadUrl, method, headers, publicUrl}' } }
+  /photos:
+    get:
+      summary: List/search photos
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: Title, tag, or merchant search }
+        - { name: projectId, in: query, schema: { type: string } }
+        - { name: merchantId, in: query, schema: { type: string }, description: UUID or 'none' for unassigned }
+        - { name: approvalStatus, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/limit' }
+        - { $ref: '#/components/parameters/offset' }
+      responses:
+        '200': { description: Paged photos, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/Photo' } } } } } } }
+    post: { summary: Register an uploaded object as a photo (creates version 1), responses: { '201': { description: Created } } }
+  /photos/{id}:
+    get: { summary: Photo detail, responses: { '200': { description: Photo } } }
+    patch: { summary: Update title/project/merchant, responses: { '200': { description: Updated } } }
+    delete: { summary: Soft-delete, responses: { '204': { description: Deleted } } }
+  /photos/{id}/tags:
+    post: { summary: Add a user tag, responses: { '201': { description: Created } } }
+  /photos/{id}/comments:
+    get: { summary: Threaded comments, responses: { '200': { description: Comments } } }
+    post: { summary: Add comment (supports pinX/pinY 0..1), responses: { '201': { description: Created } } }
+  /approvals:
+    get:
+      summary: List approval requests
+      parameters: [{ name: status, in: query, schema: { type: string } }]
+      responses: { '200': { description: Paged requests with step state } }
+  /approvals/photos/{photoId}:
+    post: { summary: Submit photo for approval (workflowId or inline steps), responses: { '201': { description: Created } } }
+  /approvals/{id}:
+    get: { summary: Request detail with steps + decisions, responses: { '200': { description: Request } } }
+  /approvals/{id}/decisions:
+    post: { summary: 'Decide: approve advances/completes; reject resolves; request_changes flags', responses: { '201': { description: Updated request } } }
+  /merchants:
+    get: { summary: List merchants with photo counts, responses: { '200': { description: Merchants } } }
+    post: { summary: Create merchant, responses: { '201': { description: Created } } }
+  /merchants/{id}:
+    patch: { summary: Rename / relocate, responses: { '200': { description: Updated } } }
+    delete: { summary: Delete (photos keep, link clears), responses: { '204': { description: Deleted } } }
+  /contacts:
+    get: { summary: List/search contacts, responses: { '200': { description: Paged contacts } } }
+    post: { summary: Create contact, responses: { '201': { description: Created } } }
+  /deals:
+    get: { summary: 'List deals (filter: stage)', responses: { '200': { description: Paged deals } } }
+    post: { summary: Create deal, responses: { '201': { description: Created } } }
+  /deals/{id}:
+    patch: { summary: Update deal / move stage, responses: { '200': { description: Updated } } }
+  /deals/{id}/photos/{photoId}:
+    post: { summary: Link photo to deal, responses: { '201': { description: Linked } } }
+  /deals/{id}/tasks/{taskId}:
+    post: { summary: Link task to deal, responses: { '201': { description: Linked } } }
+  /org/members:
+    get: { summary: List members with roles, responses: { '200': { description: Members } } }
+    post: { summary: Invite member (returns one-time temp password), responses: { '201': { description: Created } } }
+  /org/audit:
+    get: { summary: Audit log (admin+), responses: { '200': { description: Paged audit entries } } }
+  /calendar/status:
+    get: { summary: Google Calendar connection status + pending syncs, responses: { '200': { description: Status } } }
+  /calendar/connect:
+    get: { summary: Get Google consent URL, responses: { '200': { description: '{url}' } } }
+  /calendar/callback:
+    get: { security: [], summary: OAuth redirect target, responses: { '302': { description: Redirects to app } } }
+  /calendar/sync:
+    post: { summary: Queue all open dated tasks for sync, responses: { '200': { description: '{queued: n}' } } }
+  /calendar/connection:
+    delete: { summary: Disconnect Google Calendar, responses: { '204': { description: Disconnected } } }
