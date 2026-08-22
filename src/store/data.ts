@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import {
   approvals as seedApprovals,
+  users as seedUsers,
   shoots as seedShoots,
   contacts as seedContacts,
   deals as seedDeals,
@@ -11,7 +12,7 @@ import {
   projects as seedProjects,
   tasks as seedTasks,
 } from '../mocks/data'
-import type { ApprovalRequest, CommentModel, Contact, Deal, DealStage, Merchant, Photo, Project, Shoot, Task } from '../types'
+import type { ApprovalRequest, CommentModel, Contact, Deal, DealStage, Merchant, Photo, Project, Shoot, Task, User } from '../types'
 import { api, absoluteUrl, DEMO, putBytes } from '../services/api'
 import { enqueueUpload, flushQueue } from '../services/offlineQueue'
 
@@ -38,6 +39,7 @@ export interface NewShootInput {
 
 export interface NewTaskInput {
   title: string
+  assigneeIds?: string[]
   description?: string
   status: Task['status']
   priority: Task['priority']
@@ -60,6 +62,7 @@ interface DataState {
   shoots: Shoot[]
   deals: Deal[]
   contacts: Contact[]
+  members: User[]
   hydrate: () => Promise<void>
   addProject: (input: { name: string; description?: string }) => Promise<Project>
   addTask: (input: NewTaskInput) => Promise<Task>
@@ -93,6 +96,7 @@ export const useData = create<DataState>((set, get) => ({
   shoots: [],
   deals: [],
   contacts: [],
+  members: [],
 
   hydrate: async () => {
     if (get().hydrated) return
@@ -108,11 +112,12 @@ export const useData = create<DataState>((set, get) => ({
         shoots: seedShoots,
         deals: seedDeals,
         contacts: seedContacts,
+        members: seedUsers,
       })
       return
     }
     try {
-      const [projects, tasks, photos, merchants, approvals, shoots, deals, contacts] = await Promise.all([
+      const [projects, tasks, photos, merchants, approvals, shoots, deals, contacts, members] = await Promise.all([
         api<Paged<Project>>('GET', '/projects?limit=100'),
         api<Paged<Task>>('GET', '/tasks?limit=100'),
         api<Paged<Photo>>('GET', '/photos?limit=100'),
@@ -121,6 +126,7 @@ export const useData = create<DataState>((set, get) => ({
         api<Paged<Shoot>>('GET', '/shoots?limit=500'),
         api<Paged<Deal>>('GET', '/deals?limit=100'),
         api<Paged<Contact>>('GET', '/contacts?limit=100'),
+        api<Paged<User>>('GET', '/org/members'),
       ])
       set({
         hydrated: true,
@@ -133,6 +139,7 @@ export const useData = create<DataState>((set, get) => ({
         shoots: shoots.items,
         deals: deals.items,
         contacts: contacts.items,
+        members: members.items,
       })
     } catch (e) {
       set({ loadError: e instanceof Error ? e.message : 'Failed to load data' })
@@ -161,10 +168,11 @@ export const useData = create<DataState>((set, get) => ({
 
   addTask: async (input) => {
     if (DEMO) {
+      const picked = get().members.filter((m) => input.assigneeIds?.includes(m.id))
       const task: Task = {
         id: `t${Date.now()}`,
         ...input,
-        assignees: [currentUser],
+        assignees: picked.length ? picked : [currentUser],
         labels: [],
         subtaskCount: 0,
         subtaskDoneCount: 0,
@@ -181,12 +189,14 @@ export const useData = create<DataState>((set, get) => ({
 
   updateTask: async (id, patch) => {
     if (DEMO) {
+      const picked = patch.assigneeIds ? get().members.filter((m) => patch.assigneeIds!.includes(m.id)) : undefined
       set((s) => ({
         tasks: s.tasks.map((t) =>
           t.id === id
             ? {
                 ...t,
                 ...patch,
+                ...(picked ? { assignees: picked } : {}),
                 completedAt:
                   patch.status === 'completed' && t.status !== 'completed'
                     ? new Date().toISOString()
