@@ -34,7 +34,9 @@ export function MetricChart({ data, unit, height = 190, ariaLabel }: {
     const xs = data.map((_, i) => m.left + i * step)
     const ys = data.map((d) => m.top + ih - (d.value / max) * ih)
     const path = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ')
-    const area = `${path} L${xs[xs.length - 1].toFixed(1)},${m.top + ih} L${xs[0].toFixed(1)},${m.top + ih} Z`
+    const area = xs.length
+      ? `${path} L${xs[xs.length - 1].toFixed(1)},${m.top + ih} L${xs[0].toFixed(1)},${m.top + ih} Z`
+      : ''
     return { xs, ys, path, area, yTicks: [0, max / 2, max] }
   }, [data, ih, iw, m.left, m.top])
 
