@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Sparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, ScanText, Sparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import type { Photo } from '../../types'
@@ -19,7 +19,7 @@ export function PhotoViewer({ photos, index, onClose, onNavigate }: {
 }) {
   const photo = index === null ? null : photos[index]
   const [zoomed, setZoomed] = useState(false)
-  const { comments, addComment, merchants, loadComments } = useData()
+  const { comments, addComment, merchants, loadComments, setAiTagStatus } = useData()
   const photoComments = photo ? comments.filter((c) => c.photoId === photo.id) : []
   const merchant = photo ? merchants.find((m) => m.id === photo.merchantId) : undefined
 
@@ -127,21 +127,81 @@ export function PhotoViewer({ photos, index, onClose, onNavigate }: {
               <dd className="text-ink tabular-nums">{photo.versionCount}</dd>
             </dl>
 
-            {photo.tags.length > 0 && (
+            {photo.tags.some((t) => t.source !== 'ai' || t.aiStatus === 'accepted') && (
               <div className="mt-5">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">Tags</h3>
                 <div className="flex flex-wrap gap-1.5">
-                  {photo.tags.map((t) => (
-                    <Badge
-                      key={t.id}
-                      tone={t.source === 'ai' ? (t.aiStatus === 'suggested' ? 'warning' : 'brand') : 'neutral'}
-                      icon={t.source === 'ai' ? <Sparkles className="size-3" aria-hidden /> : undefined}
-                    >
-                      {t.tag}
-                      {t.source === 'ai' && t.aiStatus === 'suggested' && ' · suggested'}
-                    </Badge>
-                  ))}
+                  {photo.tags
+                    .filter((t) => t.source !== 'ai' || t.aiStatus === 'accepted')
+                    .map((t) => (
+                      <Badge
+                        key={t.id}
+                        tone={t.source === 'ai' ? 'brand' : 'neutral'}
+                        icon={t.source === 'ai' ? <Sparkles className="size-3" aria-hidden /> : undefined}
+                      >
+                        {t.tag}
+                      </Badge>
+                    ))}
                 </div>
+              </div>
+            )}
+
+            {/* AI review: suggestions await an accept/reject; metadata below */}
+            {(photo.tags.some((t) => t.source === 'ai' && t.aiStatus === 'suggested') || photo.ai) && (
+              <div className="mt-5 border-t border-border pt-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2 inline-flex items-center gap-1.5">
+                  <Sparkles className="size-3.5 text-brand-deep dark:text-brand" aria-hidden /> AI analysis
+                </h3>
+                {photo.ai?.description && <p className="text-sm text-ink-2 mb-2">{photo.ai.description}</p>}
+                {photo.ai?.classification && (
+                  <p className="text-xs text-ink-muted mb-2">Classified as <span className="text-ink font-medium">{photo.ai.classification}</span></p>
+                )}
+                {photo.tags.filter((t) => t.source === 'ai' && t.aiStatus === 'suggested').length > 0 && (
+                  <div className="grid gap-1.5 mb-2">
+                    {photo.tags
+                      .filter((t) => t.source === 'ai' && t.aiStatus === 'suggested')
+                      .map((t) => (
+                        <div key={t.id} className="flex items-center gap-2 text-sm">
+                          <Badge tone="warning">{t.tag}</Badge>
+                          {t.confidence !== undefined && (
+                            <span className="text-xs text-ink-faint tabular-nums">{Math.round(t.confidence * 100)}%</span>
+                          )}
+                          <span className="ml-auto flex gap-1">
+                            <button
+                              aria-label={`Accept tag ${t.tag}`}
+                              onClick={() => void setAiTagStatus(photo.id, t.id, 'accepted')}
+                              className="size-6 rounded-full flex items-center justify-center text-success bg-success-bg hover:opacity-80 transition-opacity"
+                            >
+                              <Check className="size-3.5" aria-hidden />
+                            </button>
+                            <button
+                              aria-label={`Reject tag ${t.tag}`}
+                              onClick={() => void setAiTagStatus(photo.id, t.id, 'rejected')}
+                              className="size-6 rounded-full flex items-center justify-center text-error bg-error-bg hover:opacity-80 transition-opacity"
+                            >
+                              <X className="size-3.5" aria-hidden />
+                            </button>
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                )}
+                {photo.ai?.ocrText && (
+                  <p className="text-xs text-ink-muted flex items-start gap-1.5 mb-1.5">
+                    <ScanText className="size-3.5 shrink-0 mt-0.5" aria-hidden />
+                    <span>Text in photo: “{photo.ai.ocrText}”</span>
+                  </p>
+                )}
+                {(photo.ai?.qualityIssues?.length ?? 0) > 0 && (
+                  <div className="grid gap-1">
+                    {photo.ai!.qualityIssues!.map((q, i) => (
+                      <p key={i} className="text-xs text-warning flex items-center gap-1.5">
+                        <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+                        {q.issue} ({q.severity}){q.note && ` — ${q.note}`}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

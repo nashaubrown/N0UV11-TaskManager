@@ -11,6 +11,8 @@ import { param } from '../lib/params.js'
 import { publicUrlFor } from '../services/storage.js'
 import { audit } from '../services/audit.js'
 import { broadcast } from '../ws/hub.js'
+import { aiConfigured, enqueueAiProcessing } from '../services/ai.js'
+import { badRequest } from '../lib/errors.js'
 
 export const photosRouter = Router()
 photosRouter.use(requireAuth)
@@ -18,6 +20,7 @@ photosRouter.use(requireAuth)
 const photoInclude = {
   users: true,
   photo_tags: true,
+  photo_ai_metadata: true,
   approval_requests: { orderBy: { created_at: 'desc' as const }, take: 1 },
   _count: { select: { comments: true, photo_versions: true } },
 } satisfies Prisma.photosInclude
@@ -49,7 +52,7 @@ photosRouter.get('/', async (req, res) => {
       ? {
           OR: [
             { title: { contains: q, mode: 'insensitive' } },
-            { photo_tags: { some: { tag: { contains: q, mode: 'insensitive' } } } },
+            { photo_tags: { some: { tag: { contains: q, mode: 'insensitive' }, NOT: { ai_status: 'rejected' } } } },
             { merchants: { name: { contains: q, mode: 'insensitive' } } },
           ],
         }
@@ -87,6 +90,7 @@ photosRouter.post('/', requireRole('member'), validate(registerPhotoDto), async 
   const out = serialize(photo)
   audit(req, 'photo.create', 'photo', photo.id, { key: b.s3Key })
   broadcast(req.auth!.organizationId, 'photo.created', out)
+  enqueueAiProcessing(photo.id, req.auth!.organizationId)
   res.status(201).json(out)
 })
 
@@ -140,6 +144,32 @@ photosRouter.delete('/:id/tags/:tagId', requireRole('member'), async (req, res) 
   await loadPhoto(req.auth!.organizationId, param(req, 'id'))
   await prisma.photo_tags.deleteMany({ where: { id: param(req, 'tagId'), photo_id: param(req, 'id') } })
   res.status(204).end()
+})
+
+/** POST /photos/:id/ai — (re)queue Claude Vision analysis. */
+photosRouter.post('/:id/ai', requireRole('member'), async (req, res) => {
+  if (!aiConfigured) throw badRequest('AI tagging is not configured on this server (set ANTHROPIC_API_KEY)')
+  await loadPhoto(req.auth!.organizationId, param(req, 'id'))
+  enqueueAiProcessing(param(req, 'id'), req.auth!.organizationId)
+  audit(req, 'photo.ai_queue', 'photo', param(req, 'id'))
+  res.status(202).json({ queued: true })
+})
+
+/** PATCH /photos/:id/tags/:tagId — accept or reject an AI suggestion. */
+photosRouter.patch('/:id/tags/:tagId', requireRole('member'), async (req, res) => {
+  await loadPhoto(req.auth!.organizationId, param(req, 'id'))
+  const status = req.body?.aiStatus
+  if (status !== 'accepted' && status !== 'rejected') throw badRequest("aiStatus must be 'accepted' or 'rejected'")
+  const { count } = await prisma.photo_tags.updateMany({
+    where: { id: param(req, 'tagId'), photo_id: param(req, 'id'), source: 'ai' },
+    data: { ai_status: status },
+  })
+  if (!count) throw notFound('AI tag')
+  audit(req, `photo.tag_${status}`, 'photo', param(req, 'id'), { tagId: param(req, 'tagId') })
+  const photo = await loadPhoto(req.auth!.organizationId, param(req, 'id'))
+  const out = serialize(photo)
+  broadcast(req.auth!.organizationId, 'photo.updated', out)
+  res.json(out)
 })
 
 /** GET /photos/:id/comments */

@@ -55,6 +55,15 @@ export const sPhoto = (p: any, urlFor: (key: string) => string) => ({
     confidence: t.confidence ?? undefined,
   })),
   approvalStatus: p.approval_requests?.[0]?.status ?? undefined,
+  ai: p.photo_ai_metadata
+    ? {
+        classification: p.photo_ai_metadata.classification ?? undefined,
+        description: (p.photo_ai_metadata.raw_response as { description?: string } | null)?.description,
+        ocrText: p.photo_ai_metadata.ocr_text ?? undefined,
+        qualityIssues: p.photo_ai_metadata.quality_issues ?? [],
+        processedAt: p.photo_ai_metadata.processed_at,
+      }
+    : undefined,
   commentCount: p._count?.comments ?? 0,
   versionCount: p._count?.photo_versions ?? 1,
   createdAt: p.created_at,

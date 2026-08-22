@@ -65,6 +65,7 @@ interface DataState {
   addShoot: (input: NewShootInput) => Promise<Shoot>
   updateShoot: (id: string, patch: Partial<NewShootInput>) => Promise<void>
   deleteShoot: (id: string) => Promise<void>
+  setAiTagStatus: (photoId: string, tagId: string, status: 'accepted' | 'rejected') => Promise<void>
   loadComments: (target: { taskId?: string; photoId?: string }) => Promise<void>
   flushOfflineUploads: () => Promise<void>
   uploadOne: (file: Blob, fileName: string, contentType: string, opts?: { projectId?: string; merchantId?: string }) => Promise<void>
@@ -317,6 +318,21 @@ export const useData = create<DataState>((set, get) => ({
   deleteShoot: async (id) => {
     if (!DEMO) await api('DELETE', `/shoots/${id}`)
     set((s) => ({ shoots: s.shoots.filter((x) => x.id !== id) }))
+  },
+
+  setAiTagStatus: async (photoId, tagId, status) => {
+    if (DEMO) {
+      set((s) => ({
+        photos: s.photos.map((p) =>
+          p.id === photoId
+            ? { ...p, tags: p.tags.map((t) => (t.id === tagId ? { ...t, aiStatus: status } : t)) }
+            : p,
+        ),
+      }))
+      return
+    }
+    const photo = await api<Photo>('PATCH', `/photos/${photoId}/tags/${tagId}`, { aiStatus: status })
+    set((s) => ({ photos: s.photos.map((p) => (p.id === photoId ? mapPhoto(photo) : p)) }))
   },
 
   /** WebSocket events from other clients (and echoes of our own, deduped). */

@@ -69,8 +69,23 @@ export interface PhotoTag {
   confidence?: number
 }
 
+export interface AiQualityIssue {
+  issue: 'blur' | 'lighting' | 'framing' | 'noise'
+  severity: 'low' | 'medium' | 'high'
+  note?: string
+}
+
+export interface PhotoAi {
+  classification?: string
+  description?: string
+  ocrText?: string
+  qualityIssues?: AiQualityIssue[]
+  processedAt?: string
+}
+
 export interface Photo {
   id: string
+  ai?: PhotoAi
   projectId?: string
   merchantId?: string
   uploadedBy?: User
