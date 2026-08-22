@@ -13,6 +13,14 @@ const uploadsDir = process.env.STORAGE_LOCAL_DIR ?? './uploads'
 const day = (n) => new Date(Date.now() + n * 86_400_000)
 
 async function main() {
+  if (!prisma.feed_plan_items || !prisma.photoshoots) {
+    console.error('Your database/Prisma client is behind the code.')
+    console.error('Run these first (from the server folder):')
+    console.error('  npm run db:apply')
+    console.error('  npm run db:generate')
+    console.error('…then re-run npm run db:demo.')
+    process.exit(1)
+  }
   const existing = await prisma.photos.count({ where: { s3_key: { startsWith: 'photos/demo/' } } })
   if (existing > 0) {
     console.log(`Demo photos already present (${existing}) — nothing to do.`)
