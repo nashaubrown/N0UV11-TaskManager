@@ -1,0 +1,4 @@
+server
+database-schema.sql
+database-architecture.md
+docker-compose.yml
