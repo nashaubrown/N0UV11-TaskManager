@@ -38,6 +38,18 @@ export interface Merchant {
   id: string
   name: string
   location?: string
+  igHandle?: string
+  bio?: string
+  logoUrl?: string
+}
+
+export interface FeedItem {
+  photoId: string
+  position: number
+  caption?: string
+  title?: string
+  url: string
+  thumbUrl: string
 }
 
 export interface Project {

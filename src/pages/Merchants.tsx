@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { CalendarDays, Image as ImageIcon, Pencil, Plus, Store } from 'lucide-react'
+import { CalendarDays, Grid3x3, Image as ImageIcon, Pencil, Plus, Store } from 'lucide-react'
 import { Button } from '../components/common/Button'
 import { Card } from '../components/common/Card'
 import { Modal } from '../components/common/Modal'
-import { Input } from '../components/common/Input'
+import { Input, Textarea } from '../components/common/Input'
 import { useData } from '../store/data'
 import type { Merchant } from '../types'
 
@@ -13,12 +13,16 @@ export default function Merchants() {
   const [editing, setEditing] = useState<Merchant | 'new' | null>(null)
   const [name, setName] = useState('')
   const [location, setLocation] = useState('')
+  const [igHandle, setIgHandle] = useState('')
+  const [bio, setBio] = useState('')
   const [error, setError] = useState<string>()
 
   const openEditor = (m: Merchant | 'new') => {
     setEditing(m)
     setName(m === 'new' ? '' : m.name)
     setLocation(m === 'new' ? '' : (m.location ?? ''))
+    setIgHandle(m === 'new' ? '' : (m.igHandle ?? ''))
+    setBio(m === 'new' ? '' : (m.bio ?? ''))
     setError(undefined)
   }
 
@@ -26,8 +30,9 @@ export default function Merchants() {
     e.preventDefault()
     if (!name.trim()) return setError('Give the merchant a name.')
     try {
-      if (editing === 'new') await addMerchant({ name: name.trim(), location: location.trim() || undefined })
-      else if (editing) await updateMerchant(editing.id, { name: name.trim(), location: location.trim() || undefined })
+      const fields = { name: name.trim(), location: location.trim() || undefined, igHandle: igHandle.trim().replace(/^@/, '') || undefined, bio: bio.trim() || undefined }
+      if (editing === 'new') await addMerchant(fields)
+      else if (editing) await updateMerchant(editing.id, fields)
       setEditing(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the merchant')
@@ -66,12 +71,20 @@ export default function Merchants() {
                 <span className="inline-flex items-center gap-1.5"><ImageIcon className="size-4" aria-hidden /> {s.photos} photos</span>
                 <span className="inline-flex items-center gap-1.5"><CalendarDays className="size-4" aria-hidden /> {s.upcoming} upcoming shoots</span>
               </div>
-              <Link
-                to={`/photos?merchantId=${m.id}`}
-                className="text-sm font-medium text-brand-deep dark:text-brand hover:underline justify-self-start"
-              >
-                View photos →
-              </Link>
+              <div className="flex items-center gap-4">
+                <Link
+                  to={`/merchants/${m.id}`}
+                  className="text-sm font-medium text-brand-deep dark:text-brand hover:underline inline-flex items-center gap-1.5"
+                >
+                  <Grid3x3 className="size-4" aria-hidden /> Feed preview
+                </Link>
+                <Link
+                  to={`/photos?merchantId=${m.id}`}
+                  className="text-sm font-medium text-ink-muted hover:text-ink hover:underline"
+                >
+                  Photos →
+                </Link>
+              </div>
             </Card>
           )
         })}
@@ -82,6 +95,9 @@ export default function Merchants() {
           <Input label="Name" placeholder="e.g. Café Aroma" value={name} error={error}
                  onChange={(e) => { setName(e.target.value); setError(undefined) }} autoFocus />
           <Input label="Location" placeholder="e.g. Hulhumalé" value={location} onChange={(e) => setLocation(e.target.value)} />
+          <Input label="Instagram handle" placeholder="e.g. cafearoma.mv" value={igHandle}
+                 onChange={(e) => setIgHandle(e.target.value)} hint="Used on the feed preview." />
+          <Textarea label="Bio" placeholder="Shown on the feed preview profile…" value={bio} onChange={(e) => setBio(e.target.value)} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
             <Button type="submit">{editing === 'new' ? 'Create merchant' : 'Save changes'}</Button>

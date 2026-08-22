@@ -24,7 +24,7 @@ merchantsRouter.get('/', async (req, res) => {
 /** POST /merchants */
 merchantsRouter.post('/', requireRole('member'), validate(createMerchantDto), async (req, res) => {
   const merchant = await prisma.merchants.create({
-    data: { organization_id: req.auth!.organizationId, name: req.body.name, location: req.body.location },
+    data: { organization_id: req.auth!.organizationId, name: req.body.name, location: req.body.location, ig_handle: req.body.igHandle, bio: req.body.bio },
   })
   audit(req, 'merchant.create', 'merchant', merchant.id, { name: merchant.name })
   res.status(201).json(sMerchant(merchant))
@@ -34,7 +34,7 @@ merchantsRouter.post('/', requireRole('member'), validate(createMerchantDto), as
 merchantsRouter.patch('/:id', requireRole('member'), validate(createMerchantDto.partial()), async (req, res) => {
   const { count } = await prisma.merchants.updateMany({
     where: { id: param(req, 'id'), organization_id: req.auth!.organizationId },
-    data: { name: req.body.name, location: req.body.location },
+    data: { name: req.body.name, location: req.body.location, ig_handle: req.body.igHandle, bio: req.body.bio },
   })
   if (!count) throw notFound('Merchant')
   res.json(sMerchant(await prisma.merchants.findUnique({ where: { id: param(req, 'id') } })))

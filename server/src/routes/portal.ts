@@ -11,6 +11,8 @@ import { publicUrlFor } from '../services/storage.js'
 import { audit } from '../services/audit.js'
 import { broadcast } from '../ws/hub.js'
 import { pushToUsers } from '../services/push.js'
+import { feedItemsFor } from './feed.js'
+import { sMerchant } from '../lib/serialize.js'
 
 /* Client review portal.
  * - Team side (authed): create/list/revoke share links for a project.
@@ -133,7 +135,19 @@ portalRouter.get('/:token', async (req, res) => {
     },
     orderBy: { created_at: 'desc' },
   })
+  // feed previews for merchants whose photos are in this project
+  const merchantIds = [...new Set(photos.map((p) => p.merchant_id).filter(Boolean))] as string[]
+  const feeds = []
+  for (const mid of merchantIds) {
+    const items = await feedItemsFor(mid)
+    if (items.length) {
+      const m = await prisma.merchants.findUnique({ where: { id: mid } })
+      if (m) feeds.push({ merchant: sMerchant(m), items })
+    }
+  }
+
   res.json({
+    feeds,
     organization: link.organizations.name,
     project: { name: link.projects!.name, description: link.projects!.description ?? undefined },
     label: link.label ?? undefined,

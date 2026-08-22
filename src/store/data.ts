@@ -76,8 +76,8 @@ interface DataState {
   addDeal: (input: { name: string; stage: DealStage; valueCents?: number; currency: string; contactId?: string }) => Promise<void>
   updateDeal: (id: string, patch: { stage?: DealStage; name?: string; valueCents?: number }) => Promise<void>
   addContact: (input: { fullName: string; email?: string; phone?: string; company?: string }) => Promise<Contact>
-  addMerchant: (input: { name: string; location?: string }) => Promise<void>
-  updateMerchant: (id: string, patch: { name?: string; location?: string }) => Promise<void>
+  addMerchant: (input: { name: string; location?: string; igHandle?: string; bio?: string }) => Promise<void>
+  updateMerchant: (id: string, patch: { name?: string; location?: string; igHandle?: string; bio?: string }) => Promise<void>
   inviteMember: (input: { fullName: string; email: string; role: Exclude<OrgRole, 'owner'> }) => Promise<{ tempPassword?: string }>
   setMemberRole: (userId: string, role: Exclude<OrgRole, 'owner'>) => Promise<void>
   removeMember: (userId: string) => Promise<void>

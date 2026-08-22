@@ -21,7 +21,13 @@ interface PortalPhoto {
   approvalStatus: ApprovalStatus
   comments: PortalComment[]
 }
+interface PortalFeed {
+  merchant: { name: string; igHandle?: string; bio?: string; location?: string; logoUrl?: string }
+  items: { photoId: string; thumbUrl: string; url: string }[]
+}
+
 interface PortalData {
+  feeds?: PortalFeed[]
   organization: string
   project: { name: string; description?: string }
   label?: string
@@ -65,7 +71,14 @@ export default function Portal({ token }: { token: string }) {
       .then(async (res) => {
         const body = await res.json()
         if (!res.ok) throw new Error(body?.error?.message ?? 'This review link is not available')
-        setData({ ...body, photos: body.photos.map((p: PortalPhoto) => ({ ...p, url: absoluteUrl(p.url), thumbUrl: absoluteUrl(p.thumbUrl) })) })
+        setData({
+          ...body,
+          photos: body.photos.map((p: PortalPhoto) => ({ ...p, url: absoluteUrl(p.url), thumbUrl: absoluteUrl(p.thumbUrl) })),
+          feeds: (body.feeds ?? []).map((f: PortalFeed) => ({
+            ...f,
+            items: f.items.map((i) => ({ ...i, url: absoluteUrl(i.url), thumbUrl: absoluteUrl(i.thumbUrl) })),
+          })),
+        })
       })
       .catch((e) => setError(e.message))
   }, [token])
@@ -186,6 +199,40 @@ export default function Portal({ token }: { token: string }) {
             )
           })}
         </div>
+        {(data.feeds?.length ?? 0) > 0 && (
+          <section className="grid gap-4 mt-6">
+            <div>
+              <h2 className="font-display font-semibold text-xl text-ink">How your feed will look</h2>
+              <p className="text-sm text-ink-muted">Approved photos, laid out in posting order.</p>
+            </div>
+            <div className="flex flex-wrap gap-6 justify-center tablet:justify-start">
+              {data.feeds!.map((f) => (
+                <div key={f.merchant.name} className="w-[300px] rounded-[36px] border-8 border-ink bg-black shadow-xl overflow-hidden">
+                  <div className="bg-white">
+                    <div className="h-6 flex items-center justify-center"><div className="w-20 h-4 rounded-full bg-black" /></div>
+                    <div className="px-3 py-2 flex items-center gap-4">
+                      <div className="size-12 rounded-full nv-gradient flex items-center justify-center text-white font-display font-bold">
+                        {f.merchant.name[0]}
+                      </div>
+                      <div>
+                        <p className="text-[13px] font-semibold text-neutral-900">{f.merchant.igHandle ?? f.merchant.name}</p>
+                        <p className="text-[12px] text-neutral-500">{f.items.length} planned posts</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-px">
+                      {f.items.map((i) => (
+                        <div key={i.photoId} className="relative aspect-[3/4] bg-neutral-200">
+                          <img src={i.thumbUrl} alt="" className="absolute inset-0 size-full object-cover" />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="h-4" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
 
       {/* review modal */}

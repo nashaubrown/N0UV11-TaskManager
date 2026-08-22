@@ -21,6 +21,7 @@ import { calendarRouter } from './routes/calendar.js'
 import { shootsRouter } from './routes/shoots.js'
 import { pushRouter } from './routes/push.js'
 import { portalRouter, shareLinksRouter } from './routes/portal.js'
+import { feedRouter } from './routes/feed.js'
 
 export function createApp() {
   const app = express()
@@ -46,6 +47,7 @@ export function createApp() {
   app.use('/api/photos', photosRouter)
   app.use('/api/uploads', uploadsRouter)
   app.use('/api/approvals', approvalsRouter)
+  app.use('/api/merchants', feedRouter)
   app.use('/api/merchants', merchantsRouter)
   app.use('/api/contacts', contactsRouter)
   app.use('/api/deals', dealsRouter)

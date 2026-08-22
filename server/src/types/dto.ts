@@ -95,6 +95,8 @@ export const decisionDto = z.object({
 export const createMerchantDto = z.object({
   name: z.string().min(1).max(200),
   location: z.string().max(200).optional(),
+  igHandle: z.string().max(60).regex(/^[a-z0-9._]*$/i, 'Handles use letters, numbers, dots, underscores').optional(),
+  bio: z.string().max(400).optional(),
 })
 export const createContactDto = z.object({
   fullName: z.string().min(1).max(200),

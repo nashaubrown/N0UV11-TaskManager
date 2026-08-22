@@ -85,7 +85,12 @@ export const sComment = (c: any): any => ({
 })
 
 export const sMerchant = (m: any) => ({
-  id: m.id, name: m.name, location: m.location ?? undefined,
+  id: m.id,
+  name: m.name,
+  location: m.location ?? undefined,
+  igHandle: m.ig_handle ?? undefined,
+  bio: m.bio ?? undefined,
+  logoUrl: m.logo_url ?? undefined,
 })
 
 export const sContact = (c: any) => ({

@@ -70,6 +70,8 @@ CREATE TABLE merchants (
   location        TEXT,                          -- e.g. 'Malé', 'Hulhumalé'
   contact_id      UUID,                          -- FK added after contacts table
   logo_url        TEXT,
+  ig_handle       TEXT,
+  bio             TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (organization_id, name)
@@ -312,6 +314,18 @@ CREATE TABLE deal_tasks (
   task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   PRIMARY KEY (deal_id, task_id)
 );
+
+-- ---------- Merchant feed planning (Instagram-style preview) ----------
+CREATE TABLE feed_plan_items (
+  merchant_id UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+  photo_id    UUID NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+  position    INTEGER NOT NULL DEFAULT 0,
+  caption     TEXT,
+  added_by    UUID REFERENCES users(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (merchant_id, photo_id)
+);
+CREATE INDEX idx_feed_plan_order ON feed_plan_items (merchant_id, position);
 
 -- ---------- Photoshoot calendar ----------
 
