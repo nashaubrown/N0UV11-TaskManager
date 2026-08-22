@@ -16,14 +16,23 @@ export function ShootDetail({ shootId, onClose }: { shootId: string | null; onCl
   const { shoots, merchants, projects, updateShoot, deleteShoot } = useData()
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [error, setError] = useState<string>()
 
   const shoot = shoots.find((s) => s.id === shootId)
   const merchant = shoot?.merchantId ? merchants.find((m) => m.id === shoot.merchantId) : undefined
   const project = shoot?.projectId ? projects.find((p) => p.id === shoot.projectId) : undefined
   const display = shoot ? shootDisplayStatus(shoot) : 'planning'
 
-  const close = () => { setEditing(false); setConfirmDelete(false); onClose() }
-  const move = (status: Shoot['status']) => shoot && void updateShoot(shoot.id, { status })
+  const close = () => { setEditing(false); setConfirmDelete(false); setError(undefined); onClose() }
+  const move = async (status: Shoot['status']) => {
+    if (!shoot) return
+    try {
+      await updateShoot(shoot.id, { status })
+      setError(undefined)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update the shoot')
+    }
+  }
 
   return (
     <Modal open={shoot !== undefined} onClose={close} size="lg" title={editing ? 'Edit shoot' : (shoot?.title ?? '')}>
@@ -35,6 +44,7 @@ export function ShootDetail({ shootId, onClose }: { shootId: string | null; onCl
         />
       ) : (
         <div className="grid gap-5">
+          {error && <p role="alert" className="text-sm text-error">{error}</p>}
           <div className="flex items-center gap-1.5 flex-wrap">
             <Badge tone={SHOOT_STATUS_META[display].tone}>{SHOOT_STATUS_META[display].label}</Badge>
             {shoot.gcalSynced && <Badge tone="neutral">Google Calendar ✓</Badge>}

@@ -73,6 +73,7 @@ export default function Calendar() {
   const [cursor, setCursor] = useState(() => new Date())
   const [creating, setCreating] = useState<Date | null>(null)
   const [openShootId, setOpenShootId] = useState<string | null>(null)
+  const [createError, setCreateError] = useState<string>()
   const { addShoot } = useData()
 
   const gridStart = startOfWeek(startOfMonth(cursor), { weekStartsOn: 1 })
@@ -215,11 +216,25 @@ export default function Calendar() {
         </Card>
       </div>
 
-      <Modal open={creating !== null} onClose={() => setCreating(null)} title="New photoshoot" size="lg">
+      <Modal
+        open={creating !== null}
+        onClose={() => { setCreating(null); setCreateError(undefined) }}
+        title="New photoshoot"
+        size="lg"
+      >
+        {createError && <p role="alert" className="text-sm text-error mb-3">{createError}</p>}
         <ShootForm
           defaultDate={creating ?? undefined}
-          onSubmit={(values) => { void addShoot(values); setCreating(null) }}
-          onCancel={() => setCreating(null)}
+          onSubmit={async (values) => {
+            try {
+              await addShoot(values)
+              setCreating(null)
+              setCreateError(undefined)
+            } catch (e) {
+              setCreateError(e instanceof Error ? e.message : 'Could not create the shoot')
+            }
+          }}
+          onCancel={() => { setCreating(null); setCreateError(undefined) }}
         />
       </Modal>
 
