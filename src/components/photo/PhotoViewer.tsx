@@ -19,9 +19,14 @@ export function PhotoViewer({ photos, index, onClose, onNavigate }: {
 }) {
   const photo = index === null ? null : photos[index]
   const [zoomed, setZoomed] = useState(false)
-  const { comments, addComment, merchants } = useData()
+  const { comments, addComment, merchants, loadComments } = useData()
   const photoComments = photo ? comments.filter((c) => c.photoId === photo.id) : []
   const merchant = photo ? merchants.find((m) => m.id === photo.merchantId) : undefined
+
+  useEffect(() => {
+    if (photo) void loadComments({ photoId: photo.id })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photo?.id])
 
   useEffect(() => setZoomed(false), [index])
 

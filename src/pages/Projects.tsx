@@ -16,13 +16,17 @@ export default function Projects() {
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string>()
 
-  const create = (e: React.FormEvent) => {
+  const create = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return setError('Give the project a name.')
-    const project = addProject({ name: name.trim(), description: description.trim() || undefined })
-    setCreating(false)
-    setName(''); setDescription(''); setError(undefined)
-    navigate(`/projects/${project.id}`)
+    try {
+      const project = await addProject({ name: name.trim(), description: description.trim() || undefined })
+      setCreating(false)
+      setName(''); setDescription(''); setError(undefined)
+      navigate(`/projects/${project.id}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create the project')
+    }
   }
 
   return (

@@ -9,7 +9,6 @@ import { TaskList } from '../components/task/TaskList'
 import { PhotoGallery } from '../components/photo/PhotoGallery'
 import { PhotoViewer } from '../components/photo/PhotoViewer'
 import { ApprovalWorkflow } from '../components/approval/ApprovalWorkflow'
-import { approvals } from '../mocks/data'
 import { projectStats, useData } from '../store/data'
 import { TaskDetail } from '../components/task/TaskDetail'
 import { TaskForm, type TaskFormValues } from '../components/task/TaskForm'
@@ -21,7 +20,7 @@ type Tab = 'tasks' | 'photos' | 'approvals'
 
 export default function ProjectView() {
   const { projectId } = useParams()
-  const { projects, tasks, photos, addTask, addPhotos } = useData()
+  const { projects, tasks, photos, approvals, addTask, addPhotos } = useData()
   const project = projects.find((p) => p.id === projectId)
   const [tab, setTab] = useState<Tab>('tasks')
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
@@ -45,7 +44,7 @@ export default function ProjectView() {
   const stats = projectStats(projectId ?? '', tasks, photos)
   const projectApprovals = useMemo(
     () => approvals.filter((a) => projectPhotos.some((p) => p.id === a.photoId)),
-    [projectPhotos],
+    [approvals, projectPhotos],
   )
 
   if (!project) {

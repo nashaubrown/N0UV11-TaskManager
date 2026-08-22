@@ -1,14 +1,18 @@
-import { Bell, Menu, Moon, Search, Sun } from 'lucide-react'
+import { useState } from 'react'
+import { Bell, LogOut, Menu, Moon, Search, Sun } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '../common/Button'
 import { Avatar } from '../common/Avatar'
 import { useTheme } from '../../store/theme'
 import { useUi } from '../../store/ui'
-import { currentUser } from '../../mocks/data'
+import { useAuth } from '../../store/auth'
+import { DEMO } from '../../services/api'
 
 export function Header() {
   const { theme, toggle } = useTheme()
   const setSidebarOpen = useUi((s) => s.setSidebarOpen)
+  const { user, logout } = useAuth()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   return (
     <header className="sticky top-0 z-30 h-14 bg-surface/90 backdrop-blur border-b border-border flex items-center gap-3 px-4">
@@ -45,7 +49,37 @@ export function Header() {
             <span className="absolute top-1 right-1 size-2 rounded-full nv-gradient" aria-hidden />
           </>}
         />
-        <Avatar user={currentUser} size="sm" />
+        {user && (
+          <div className="relative">
+            <button
+              aria-label="Account menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}
+              className="rounded-full focus-visible:outline-2 focus-visible:outline-brand"
+            >
+              <Avatar user={user} size="sm" />
+            </button>
+            {menuOpen && (
+              <div
+                className="absolute right-0 top-full mt-2 w-48 rounded-(--nv-radius-md) border border-border bg-surface shadow-lg p-1.5 z-50"
+                onMouseLeave={() => setMenuOpen(false)}
+              >
+                <p className="px-2.5 py-1.5 text-sm">
+                  <span className="block font-medium text-ink truncate">{user.fullName}</span>
+                  <span className="block text-xs text-ink-muted truncate">{user.email}</span>
+                </p>
+                {!DEMO && (
+                  <button
+                    onClick={logout}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-(--nv-radius-sm) text-sm text-ink-2 hover:bg-surface-2 transition-colors"
+                  >
+                    <LogOut className="size-4" aria-hidden /> Log out
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   )

@@ -48,6 +48,14 @@ npm run dev                      # API on http://localhost:4000
 - WebSocket events: `ws://localhost:4000/ws?token=<accessToken>`
 - Smoke tests: `node server/smoke.test.mjs` (39 checks; server must be running)
 
+**Full stack**: with both running, the app at :5173 shows a login screen —
+sign in with the seeded account (or create your own workspace) and all data
+persists to Postgres, uploads go through the presigned flow, and changes
+broadcast live to every open tab over WebSocket.
+
+**Demo mode** (no backend): `npm run dev:demo` — runs on in-memory mock data,
+no login. The shareable artifact preview uses this mode.
+
 Open **/styleguide** in the app for the living component catalog (all variants and
 states — flip the header theme toggle to QA dark mode).
 

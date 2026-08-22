@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CalendarDays, Pencil } from 'lucide-react'
 import { TASK_PRIORITY_META, TASK_STATUS_META } from '../../types'
 import { Badge } from '../common/Badge'
@@ -13,8 +13,12 @@ import { formatDue } from '../../utils/format'
 
 /** Task modal: read view with comment thread, flips to the edit form. */
 export function TaskDetail({ taskId, onClose }: { taskId: string | null; onClose: () => void }) {
-  const { tasks, comments, projects, updateTask, addComment } = useData()
+  const { tasks, comments, projects, updateTask, addComment, loadComments } = useData()
   const [editing, setEditing] = useState(false)
+
+  useEffect(() => {
+    if (taskId) void loadComments({ taskId })
+  }, [taskId, loadComments])
 
   const task = tasks.find((t) => t.id === taskId)
   const taskComments = comments.filter((c) => c.taskId === taskId)

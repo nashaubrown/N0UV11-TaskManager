@@ -5,7 +5,7 @@ import { TrendChart } from '../components/common/TrendChart'
 import { TaskCard } from '../components/task/TaskCard'
 import { Badge } from '../components/common/Badge'
 import { useState } from 'react'
-import { completionTrend, currentUser } from '../mocks/data'
+import { useAuth } from '../store/auth'
 import { useData } from '../store/data'
 import { TaskDetail } from '../components/task/TaskDetail'
 import { TASK_STATUS_META, type TaskStatus } from '../types'
@@ -14,6 +14,16 @@ const STATUS_ORDER: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'complet
 
 export default function Dashboard() {
   const { tasks, photos } = useData()
+  const user = useAuth((s) => s.user)
+  // completions per day, trailing 14 days, from live data
+  const completionTrend = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (13 - i))
+    const next = new Date(d); next.setDate(d.getDate() + 1)
+    return {
+      date: d.toISOString(),
+      count: tasks.filter((t) => t.completedAt && new Date(t.completedAt) >= d && new Date(t.completedAt) < next).length,
+    }
+  })
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const open = tasks.filter((t) => !['completed', 'cancelled'].includes(t.status))
   const dueSoon = open
@@ -30,7 +40,7 @@ export default function Dashboard() {
     <div className="grid gap-6">
       <div>
         <h1 className="font-display font-bold text-[28px] tablet:text-[32px] leading-tight text-ink">
-          Good morning, {currentUser.fullName.split(' ')[0]}
+          Good morning, {(user?.fullName ?? 'there').split(' ')[0]}
         </h1>
         <p className="text-ink-muted mt-1">Here's what's moving across your projects today.</p>
       </div>

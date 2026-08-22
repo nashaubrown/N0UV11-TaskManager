@@ -9,7 +9,7 @@ const req = (name: string, fallback?: string): string => {
 export const config = {
   env: process.env.NODE_ENV ?? 'development',
   port: Number(process.env.PORT ?? 4000),
-  corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+  corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173,http://localhost:4173',
   jwt: {
     secret: req('JWT_SECRET', 'dev-only-secret-change-me'),
     accessTtlSec: 60 * 15,          // 15 min

@@ -1,8 +1,13 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, HashRouter, Route, Routes } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './services/queryClient'
 import { AppShell } from './components/layout/AppShell'
+import { useAuth } from './store/auth'
+import { useData } from './store/data'
+import { connectRealtime, disconnectRealtime } from './services/ws'
+import { DEMO } from './services/api'
+import Login from './pages/Login'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Projects = lazy(() => import('./pages/Projects'))
@@ -23,21 +28,46 @@ function PageFallback() {
 // Single-file preview builds have no server-side routing — use hash URLs there.
 const Router = import.meta.env.MODE === 'artifact' ? HashRouter : BrowserRouter
 
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route index element={<Suspense fallback={<PageFallback />}><Dashboard /></Suspense>} />
+        <Route path="projects" element={<Suspense fallback={<PageFallback />}><Projects /></Suspense>} />
+        <Route path="projects/:projectId" element={<Suspense fallback={<PageFallback />}><ProjectView /></Suspense>} />
+        <Route path="tasks" element={<Suspense fallback={<PageFallback />}><Tasks /></Suspense>} />
+        <Route path="photos" element={<Suspense fallback={<PageFallback />}><PhotoLibrary /></Suspense>} />
+        <Route path="deals" element={<Suspense fallback={<PageFallback />}><Deals /></Suspense>} />
+        <Route path="styleguide" element={<Suspense fallback={<PageFallback />}><Styleguide /></Suspense>} />
+      </Route>
+    </Routes>
+  )
+}
+
+function Gate() {
+  const { ready, user, init } = useAuth()
+  const hydrate = useData((s) => s.hydrate)
+
+  useEffect(() => { void init() }, [init])
+
+  useEffect(() => {
+    if (DEMO || user) {
+      void hydrate()
+      connectRealtime()
+      return disconnectRealtime
+    }
+  }, [user, hydrate])
+
+  if (!DEMO && !ready) return <PageFallback />
+  if (!DEMO && !user) return <Login />
+  return <AppRoutes />
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route index element={<Suspense fallback={<PageFallback />}><Dashboard /></Suspense>} />
-            <Route path="projects" element={<Suspense fallback={<PageFallback />}><Projects /></Suspense>} />
-            <Route path="projects/:projectId" element={<Suspense fallback={<PageFallback />}><ProjectView /></Suspense>} />
-            <Route path="tasks" element={<Suspense fallback={<PageFallback />}><Tasks /></Suspense>} />
-            <Route path="photos" element={<Suspense fallback={<PageFallback />}><PhotoLibrary /></Suspense>} />
-            <Route path="deals" element={<Suspense fallback={<PageFallback />}><Deals /></Suspense>} />
-            <Route path="styleguide" element={<Suspense fallback={<PageFallback />}><Styleguide /></Suspense>} />
-          </Route>
-        </Routes>
+        <Gate />
       </Router>
     </QueryClientProvider>
   )
