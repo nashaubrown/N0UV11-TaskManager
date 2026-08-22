@@ -12,7 +12,7 @@ import {
   projects as seedProjects,
   tasks as seedTasks,
 } from '../mocks/data'
-import type { ApprovalRequest, CommentModel, Contact, Deal, DealStage, Merchant, Photo, Project, Shoot, Task, User } from '../types'
+import type { ApprovalRequest, CommentModel, Contact, Deal, DealStage, Member, Merchant, OrgRole, Photo, Project, Shoot, Task } from '../types'
 import { api, absoluteUrl, DEMO, putBytes } from '../services/api'
 import { enqueueUpload, flushQueue } from '../services/offlineQueue'
 
@@ -62,7 +62,7 @@ interface DataState {
   shoots: Shoot[]
   deals: Deal[]
   contacts: Contact[]
-  members: User[]
+  members: Member[]
   hydrate: () => Promise<void>
   addProject: (input: { name: string; description?: string }) => Promise<Project>
   addTask: (input: NewTaskInput) => Promise<Task>
@@ -78,6 +78,9 @@ interface DataState {
   addContact: (input: { fullName: string; email?: string; phone?: string; company?: string }) => Promise<Contact>
   addMerchant: (input: { name: string; location?: string }) => Promise<void>
   updateMerchant: (id: string, patch: { name?: string; location?: string }) => Promise<void>
+  inviteMember: (input: { fullName: string; email: string; role: Exclude<OrgRole, 'owner'> }) => Promise<{ tempPassword?: string }>
+  setMemberRole: (userId: string, role: Exclude<OrgRole, 'owner'>) => Promise<void>
+  removeMember: (userId: string) => Promise<void>
   loadComments: (target: { taskId?: string; photoId?: string }) => Promise<void>
   flushOfflineUploads: () => Promise<void>
   uploadOne: (file: Blob, fileName: string, contentType: string, opts?: { projectId?: string; merchantId?: string }) => Promise<void>
@@ -112,7 +115,7 @@ export const useData = create<DataState>((set, get) => ({
         shoots: seedShoots,
         deals: seedDeals,
         contacts: seedContacts,
-        members: seedUsers,
+        members: seedUsers.map((u, i) => ({ ...u, role: (['owner', 'manager', 'member', 'member'] as const)[i] ?? 'member' })),
       })
       return
     }
@@ -126,7 +129,7 @@ export const useData = create<DataState>((set, get) => ({
         api<Paged<Shoot>>('GET', '/shoots?limit=500'),
         api<Paged<Deal>>('GET', '/deals?limit=100'),
         api<Paged<Contact>>('GET', '/contacts?limit=100'),
-        api<Paged<User>>('GET', '/org/members'),
+        api<Paged<Member>>('GET', '/org/members'),
       ])
       set({
         hydrated: true,
@@ -417,6 +420,27 @@ export const useData = create<DataState>((set, get) => ({
     }
     const merchant = await api<Merchant>('PATCH', `/merchants/${id}`, patch)
     set((s) => ({ merchants: s.merchants.map((m) => (m.id === id ? merchant : m)) }))
+  },
+
+  inviteMember: async (input) => {
+    if (DEMO) {
+      const member: Member = { id: `u${Date.now()}`, email: input.email, fullName: input.fullName, role: input.role }
+      set((s) => ({ members: [...s.members, member] }))
+      return { tempPassword: 'demo-only-password' }
+    }
+    const created = await api<Member & { tempPassword: string }>('POST', '/org/members', input)
+    set((s) => ({ members: [...s.members, created] }))
+    return { tempPassword: created.tempPassword }
+  },
+
+  setMemberRole: async (userId, role) => {
+    if (!DEMO) await api('PATCH', `/org/members/${userId}`, { role })
+    set((s) => ({ members: s.members.map((m) => (m.id === userId ? { ...m, role } : m)) }))
+  },
+
+  removeMember: async (userId) => {
+    if (!DEMO) await api('DELETE', `/org/members/${userId}`)
+    set((s) => ({ members: s.members.filter((m) => m.id !== userId) }))
   },
 
   /** WebSocket events from other clients (and echoes of our own, deduped). */

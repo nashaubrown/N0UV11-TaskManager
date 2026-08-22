@@ -18,6 +18,7 @@ const Calendar = lazy(() => import('./pages/Calendar'))
 const PhotoLibrary = lazy(() => import('./pages/PhotoLibrary'))
 const Deals = lazy(() => import('./pages/Deals'))
 const Merchants = lazy(() => import('./pages/Merchants'))
+const Team = lazy(() => import('./pages/Team'))
 const Styleguide = lazy(() => import('./pages/Styleguide'))
 
 function PageFallback() {
@@ -43,6 +44,7 @@ function AppRoutes() {
         <Route path="photos" element={<Suspense fallback={<PageFallback />}><PhotoLibrary /></Suspense>} />
         <Route path="merchants" element={<Suspense fallback={<PageFallback />}><Merchants /></Suspense>} />
         <Route path="deals" element={<Suspense fallback={<PageFallback />}><Deals /></Suspense>} />
+        <Route path="team" element={<Suspense fallback={<PageFallback />}><Team /></Suspense>} />
         <Route path="styleguide" element={<Suspense fallback={<PageFallback />}><Styleguide /></Suspense>} />
       </Route>
     </Routes>

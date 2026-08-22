@@ -2,7 +2,9 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { randomBytes } from 'node:crypto'
 import { prisma } from '../lib/prisma.js'
-import { badRequest } from '../lib/errors.js'
+import { badRequest, forbidden, notFound } from '../lib/errors.js'
+import { param } from '../lib/params.js'
+import { z } from 'zod'
 import { requireAuth, requireRole } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { inviteMemberDto } from '../types/dto.js'
@@ -50,6 +52,44 @@ orgRouter.post('/members', requireRole('admin'), validate(inviteMemberDto), asyn
   })
   audit(req, 'member.invite', 'user', user.id, { email, role })
   res.status(201).json({ ...sUser(user), role, tempPassword })
+})
+
+/** PATCH /org/members/:userId — change a member's role. Owner is immutable;
+ *  only the owner can grant or revoke admin. */
+orgRouter.patch('/members/:userId', requireRole('admin'), validate(z.object({
+  role: z.enum(['admin', 'manager', 'member', 'viewer']),
+})), async (req, res) => {
+  const userId = param(req, 'userId')
+  const target = await prisma.organization_members.findUnique({
+    where: { organization_id_user_id: { organization_id: req.auth!.organizationId, user_id: userId } },
+  })
+  if (!target) throw notFound('Member')
+  if (target.role === 'owner') throw forbidden("The owner's role cannot be changed")
+  if ((req.body.role === 'admin' || target.role === 'admin') && req.auth!.role !== 'owner') {
+    throw forbidden('Only the owner can grant or revoke admin')
+  }
+  await prisma.organization_members.update({
+    where: { organization_id_user_id: { organization_id: req.auth!.organizationId, user_id: userId } },
+    data: { role: req.body.role },
+  })
+  audit(req, 'member.role_change', 'user', userId, { from: target.role, to: req.body.role })
+  res.json({ userId, role: req.body.role })
+})
+
+/** DELETE /org/members/:userId — remove from the organization. */
+orgRouter.delete('/members/:userId', requireRole('admin'), async (req, res) => {
+  const userId = param(req, 'userId')
+  if (userId === req.auth!.userId) throw badRequest('You cannot remove yourself')
+  const target = await prisma.organization_members.findUnique({
+    where: { organization_id_user_id: { organization_id: req.auth!.organizationId, user_id: userId } },
+  })
+  if (!target) throw notFound('Member')
+  if (target.role === 'owner') throw forbidden('The owner cannot be removed')
+  await prisma.organization_members.delete({
+    where: { organization_id_user_id: { organization_id: req.auth!.organizationId, user_id: userId } },
+  })
+  audit(req, 'member.remove', 'user', userId)
+  res.status(204).end()
 })
 
 /** GET /org/audit — audit log, newest first. */

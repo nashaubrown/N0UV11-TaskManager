@@ -19,6 +19,21 @@ export interface User {
   role: UserRole
 }
 
+export type OrgRole = 'owner' | 'admin' | 'manager' | 'member' | 'viewer'
+
+export interface Member extends User {
+  role: OrgRole
+  joinedAt?: string
+}
+
+export const ROLE_META: Record<OrgRole, { label: string; description: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'error' | 'brand' }> = {
+  owner: { label: 'Owner', tone: 'brand', description: 'Everything, including billing and ownership transfer.' },
+  admin: { label: 'Admin', tone: 'error', description: 'Manage team, roles, and the audit log, plus everything below.' },
+  manager: { label: 'Manager', tone: 'warning', description: 'Delete projects and merchants, plus everything below.' },
+  member: { label: 'Member', tone: 'info', description: 'Create and edit tasks, photos, shoots, deals, and comments.' },
+  viewer: { label: 'Viewer', tone: 'neutral', description: 'Read-only access to everything.' },
+}
+
 export interface Merchant {
   id: string
   name: string
