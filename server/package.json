@@ -11,7 +11,8 @@
     "db:pull": "prisma db pull",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "db:demo": "node scripts/demo-data.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

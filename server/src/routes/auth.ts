@@ -12,7 +12,12 @@ import { audit } from '../services/audit.js'
 
 export const authRouter = Router()
 
-const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: true, legacyHeaders: false })
+const authLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: Number(process.env.AUTH_RATE_LIMIT ?? 20),
+  standardHeaders: true,
+  legacyHeaders: false,
+})
 
 const hashToken = (t: string) => createHash('sha256').update(t).digest('hex')
 
