@@ -207,9 +207,9 @@ export default function Portal({ token }: { token: string }) {
             </div>
             <div className="flex flex-wrap gap-6 justify-center tablet:justify-start">
               {data.feeds!.map((f) => (
-                <div key={f.merchant.name} className="w-[300px] rounded-[36px] border-8 border-ink bg-black shadow-xl overflow-hidden">
+                <div key={f.merchant.name} className="w-[360px] max-w-full rounded-[44px] border-[10px] border-ink bg-black shadow-xl overflow-hidden">
                   <div className="bg-white">
-                    <div className="h-6 flex items-center justify-center"><div className="w-20 h-4 rounded-full bg-black" /></div>
+                    <div className="h-8 flex items-center justify-center"><div className="w-24 h-5 rounded-full bg-black" /></div>
                     <div className="px-3 py-2 flex items-center gap-4">
                       <div className="size-12 rounded-full nv-gradient flex items-center justify-center text-white font-display font-bold">
                         {f.merchant.name[0]}

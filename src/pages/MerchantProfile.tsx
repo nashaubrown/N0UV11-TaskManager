@@ -147,13 +147,14 @@ export default function MerchantProfile() {
       </div>
       {error && <p role="alert" className="text-sm text-error">{error}</p>}
 
-      <div className="grid desktop:grid-cols-[400px_1fr] gap-6 items-start justify-items-center desktop:justify-items-start">
+      <div className="grid desktop:grid-cols-[460px_1fr] gap-6 items-start justify-items-center desktop:justify-items-start">
         {/* phone frame */}
-        <div className="w-[350px] rounded-[42px] border-[10px] border-ink bg-black shadow-xl overflow-hidden">
-          <div className="bg-white dark:bg-neutral-950">
-            {/* notch bar */}
-            <div className="h-8 bg-inherit flex items-center justify-center">
-              <div className="w-24 h-5 rounded-full bg-black" />
+        {/* iPhone Pro Max proportions: ~430pt wide, 19.5:9 */}
+        <div className="w-[430px] max-w-full rounded-[54px] border-[12px] border-ink bg-black shadow-xl overflow-hidden">
+          <div className="bg-white dark:bg-neutral-950 min-h-[890px] flex flex-col">
+            {/* dynamic island */}
+            <div className="h-10 bg-inherit flex items-center justify-center">
+              <div className="w-28 h-6 rounded-full bg-black" />
             </div>
             <div className="px-4 pb-2 flex items-center justify-between">
               <span className="font-semibold text-[15px] text-neutral-900 dark:text-neutral-100">{handle}</span>
@@ -181,7 +182,7 @@ export default function MerchantProfile() {
             </div>
             {/* grid */}
             {items.length === 0 ? (
-              <p className="text-center text-[13px] text-neutral-500 py-10 px-6">
+              <p className="flex-1 grid place-items-center text-center text-[13px] text-neutral-500 px-6">
                 No posts planned yet — add approved photos from the tray.
               </p>
             ) : (
@@ -206,7 +207,7 @@ export default function MerchantProfile() {
                 ))}
               </div>
             )}
-            <div className="h-6" />
+            <div className="mt-auto h-8" />
           </div>
         </div>
 
