@@ -12,8 +12,12 @@ export const DEMO =
     typeof window !== 'undefined' &&
     !['localhost', '127.0.0.1'].includes(window.location.hostname))
 
-const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'
-export const apiOrigin = API_URL.replace(/\/api\/?$/, '')
+/** Accepts the API base with or without the /api suffix or a trailing
+ *  slash — "https://x.onrender.com", ".../", ".../api", ".../api/" all work. */
+const RAW_API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'
+const trimmedApiUrl = RAW_API_URL.replace(/\/+$/, '')
+const API_URL: string = trimmedApiUrl.endsWith('/api') ? trimmedApiUrl : `${trimmedApiUrl}/api`
+export const apiOrigin = API_URL.replace(/\/api$/, '')
 
 const KEYS = { access: 'nv.access', refresh: 'nv.refresh' }
 
