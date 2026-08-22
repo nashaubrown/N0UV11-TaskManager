@@ -1,9 +1,10 @@
-import { Check, Layers, Loader2, MessageSquare, Sparkles } from 'lucide-react'
+import { Check, Layers, Loader2, MessageSquare, Sparkles, Store } from 'lucide-react'
 import clsx from 'clsx'
 import { motion } from 'framer-motion'
 import type { Photo } from '../../types'
 import { APPROVAL_STATUS_META } from '../../types'
 import { Badge } from '../common/Badge'
+import { useData } from '../../store/data'
 
 export function PhotoCard({ photo, selected, onOpen, onToggleSelect }: {
   photo: Photo
@@ -13,6 +14,7 @@ export function PhotoCard({ photo, selected, onOpen, onToggleSelect }: {
 }) {
   const approval = photo.approvalStatus ? APPROVAL_STATUS_META[photo.approvalStatus] : null
   const aiSuggested = photo.tags.some((t) => t.source === 'ai' && t.aiStatus === 'suggested')
+  const merchant = useData((s) => s.merchants.find((m) => m.id === photo.merchantId))
 
   return (
     <motion.figure
@@ -63,6 +65,12 @@ export function PhotoCard({ photo, selected, onOpen, onToggleSelect }: {
       <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pt-8 pb-2.5">
         <p className="text-sm font-medium text-white truncate">{photo.title ?? 'Untitled'}</p>
         <div className="flex items-center gap-2.5 text-[11px] text-white/85 mt-0.5">
+          {merchant && (
+            <span className="inline-flex items-center gap-1 min-w-0">
+              <Store className="size-3 shrink-0" aria-hidden />
+              <span className="truncate">{merchant.name}</span>
+            </span>
+          )}
           {photo.versionCount > 1 && (
             <span className="inline-flex items-center gap-1"><Layers className="size-3" aria-hidden />v{photo.versionCount}</span>
           )}

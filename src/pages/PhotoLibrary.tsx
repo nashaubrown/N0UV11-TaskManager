@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react'
-import { Download, ImagePlus, Search, Trash2, Upload, X } from 'lucide-react'
+import { Download, ImagePlus, LayoutGrid, Rows3, Search, Store, Trash2, Upload, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
+import clsx from 'clsx'
 import { Button } from '../components/common/Button'
 import { Input } from '../components/common/Input'
 import { Tabs } from '../components/common/Tabs'
@@ -8,9 +9,10 @@ import { PhotoGallery } from '../components/photo/PhotoGallery'
 import { PhotoViewer } from '../components/photo/PhotoViewer'
 import { useData } from '../store/data'
 import { useUi } from '../store/ui'
-import type { ApprovalStatus } from '../types'
+import type { ApprovalStatus, Photo } from '../types'
 
 type Filter = 'all' | 'needs_review' | 'approved' | 'rejected'
+type MerchantFilter = 'all' | 'none' | (string & {})
 
 const FILTER_MATCH: Record<Exclude<Filter, 'all'>, ApprovalStatus[]> = {
   needs_review: ['pending', 'in_review', 'changes_requested'],
@@ -19,32 +21,63 @@ const FILTER_MATCH: Record<Exclude<Filter, 'all'>, ApprovalStatus[]> = {
 }
 
 export default function PhotoLibrary() {
-  const { photos, addPhotos } = useData()
+  const { photos, merchants, addPhotos } = useData()
   const [filter, setFilter] = useState<Filter>('all')
+  const [merchantFilter, setMerchantFilter] = useState<MerchantFilter>('all')
+  const [grouped, setGrouped] = useState(false)
   const [query, setQuery] = useState('')
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [dragging, setDragging] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const { selectedPhotoIds, clearPhotoSelection } = useUi()
 
+  const merchantName = (id?: string) => merchants.find((m) => m.id === id)?.name
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return photos.filter((p) => {
       const statusOk = filter === 'all' || (p.approvalStatus && FILTER_MATCH[filter].includes(p.approvalStatus))
+      const merchantOk =
+        merchantFilter === 'all' ||
+        (merchantFilter === 'none' ? !p.merchantId : p.merchantId === merchantFilter)
       const queryOk = !q ||
         p.title?.toLowerCase().includes(q) ||
-        p.tags.some((t) => t.tag.toLowerCase().includes(q))
-      return statusOk && queryOk
+        p.tags.some((t) => t.tag.toLowerCase().includes(q)) ||
+        merchantName(p.merchantId)?.toLowerCase().includes(q)
+      return statusOk && merchantOk && queryOk
     })
-  }, [photos, filter, query])
+  }, [photos, filter, merchantFilter, query, merchants])
 
   const count = (f: Filter) =>
     f === 'all' ? photos.length : photos.filter((p) => p.approvalStatus && FILTER_MATCH[f].includes(p.approvalStatus)).length
 
+  const merchantCount = (id: MerchantFilter) =>
+    id === 'all' ? photos.length
+    : id === 'none' ? photos.filter((p) => !p.merchantId).length
+    : photos.filter((p) => p.merchantId === id).length
+
+  const hasUnassigned = photos.some((p) => !p.merchantId)
+
+  /** Group-by-merchant sections, in merchant order, unassigned last. */
+  const groups = useMemo(() => {
+    if (!grouped) return null
+    const out: { key: string; title: string; subtitle?: string; photos: Photo[] }[] = []
+    for (const m of merchants) {
+      const ps = filtered.filter((p) => p.merchantId === m.id)
+      if (ps.length) out.push({ key: m.id, title: m.name, subtitle: m.location, photos: ps })
+    }
+    const none = filtered.filter((p) => !p.merchantId)
+    if (none.length) out.push({ key: 'none', title: 'Unassigned', photos: none })
+    return out
+  }, [grouped, filtered, merchants])
+
   const ingest = (list: FileList | null) => {
     if (!list) return
     const images = [...list].filter((f) => f.type.startsWith('image/'))
-    if (images.length) addPhotos(images)
+    // uploads inherit the active merchant filter, so batches file themselves
+    if (images.length) addPhotos(images, {
+      merchantId: merchantFilter !== 'all' && merchantFilter !== 'none' ? merchantFilter : undefined,
+    })
   }
 
   const onDrop = (e: DragEvent) => {
@@ -52,6 +85,14 @@ export default function PhotoLibrary() {
     setDragging(false)
     ingest(e.dataTransfer.files)
   }
+
+  const chip = (active: boolean) =>
+    clsx(
+      'inline-flex items-center gap-1.5 rounded-full px-3 h-8 text-sm font-medium whitespace-nowrap transition-colors border',
+      active
+        ? 'nv-gradient text-on-brand border-transparent shadow-sm'
+        : 'bg-surface text-ink-muted border-border hover:text-ink hover:bg-surface-2',
+    )
 
   return (
     <div
@@ -75,7 +116,7 @@ export default function PhotoLibrary() {
 
       <Input
         icon={<Search />}
-        placeholder="Search by title or tag…"
+        placeholder="Search by title, tag, or merchant…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         aria-label="Search photos"
@@ -92,10 +133,77 @@ export default function PhotoLibrary() {
         ]}
       />
 
-      <PhotoGallery
-        photos={filtered}
-        onOpen={(p) => setViewerIndex(filtered.findIndex((x) => x.id === p.id))}
-      />
+      {/* merchant chips + group toggle */}
+      <div className="flex items-center gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1 flex-1" role="group" aria-label="Filter by merchant">
+          <button className={chip(merchantFilter === 'all')} onClick={() => setMerchantFilter('all')}>
+            All merchants
+          </button>
+          {merchants.map((m) => (
+            <button
+              key={m.id}
+              className={chip(merchantFilter === m.id)}
+              onClick={() => setMerchantFilter(merchantFilter === m.id ? 'all' : m.id)}
+            >
+              <Store className="size-3.5" aria-hidden />
+              {m.name}
+              <span className={clsx('text-xs tabular-nums', merchantFilter === m.id ? 'text-on-brand/80' : 'text-ink-faint')}>
+                {merchantCount(m.id)}
+              </span>
+            </button>
+          ))}
+          {hasUnassigned && (
+            <button
+              className={chip(merchantFilter === 'none')}
+              onClick={() => setMerchantFilter(merchantFilter === 'none' ? 'all' : 'none')}
+            >
+              Unassigned
+              <span className={clsx('text-xs tabular-nums', merchantFilter === 'none' ? 'text-on-brand/80' : 'text-ink-faint')}>
+                {merchantCount('none')}
+              </span>
+            </button>
+          )}
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="shrink-0"
+          aria-pressed={grouped}
+          onClick={() => setGrouped((g) => !g)}
+          icon={grouped ? <LayoutGrid className="size-4" /> : <Rows3 className="size-4" />}
+        >
+          {grouped ? 'Flat view' : 'Group by merchant'}
+        </Button>
+      </div>
+
+      {groups ? (
+        <div className="grid gap-6">
+          {groups.length === 0 && (
+            <PhotoGallery photos={[]} onOpen={() => {}} />
+          )}
+          {groups.map((g) => (
+            <section key={g.key}>
+              <div className="flex items-baseline gap-2 mb-3">
+                <h2 className="font-display font-semibold text-lg text-ink inline-flex items-center gap-2">
+                  {g.key !== 'none' && <Store className="size-4 text-brand-deep dark:text-brand" aria-hidden />}
+                  {g.title}
+                </h2>
+                {g.subtitle && <span className="text-sm text-ink-muted">{g.subtitle}</span>}
+                <span className="text-sm text-ink-faint tabular-nums">· {g.photos.length}</span>
+              </div>
+              <PhotoGallery
+                photos={g.photos}
+                onOpen={(p) => setViewerIndex(filtered.findIndex((x) => x.id === p.id))}
+              />
+            </section>
+          ))}
+        </div>
+      ) : (
+        <PhotoGallery
+          photos={filtered}
+          onOpen={(p) => setViewerIndex(filtered.findIndex((x) => x.id === p.id))}
+        />
+      )}
 
       <PhotoViewer
         photos={filtered}
@@ -113,7 +221,12 @@ export default function PhotoLibrary() {
                        flex flex-col items-center justify-center gap-2 pointer-events-none"
           >
             <ImagePlus className="size-8 text-brand-deep dark:text-brand" aria-hidden />
-            <p className="font-medium text-ink">Drop images to upload</p>
+            <p className="font-medium text-ink">
+              Drop images to upload
+              {merchantFilter !== 'all' && merchantFilter !== 'none' && (
+                <span className="text-ink-muted"> → {merchantName(merchantFilter)}</span>
+              )}
+            </p>
           </motion.div>
         )}
       </AnimatePresence>

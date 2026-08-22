@@ -19,8 +19,9 @@ export function PhotoViewer({ photos, index, onClose, onNavigate }: {
 }) {
   const photo = index === null ? null : photos[index]
   const [zoomed, setZoomed] = useState(false)
-  const { comments, addComment } = useData()
+  const { comments, addComment, merchants } = useData()
   const photoComments = photo ? comments.filter((c) => c.photoId === photo.id) : []
+  const merchant = photo ? merchants.find((m) => m.id === photo.merchantId) : undefined
 
   useEffect(() => setZoomed(false), [index])
 
@@ -91,6 +92,12 @@ export function PhotoViewer({ photos, index, onClose, onNavigate }: {
             </div>
 
             <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+              {merchant && (
+                <>
+                  <dt className="text-ink-muted">Merchant</dt>
+                  <dd className="text-ink">{merchant.name}{merchant.location && <span className="text-ink-muted"> · {merchant.location}</span>}</dd>
+                </>
+              )}
               {photo.widthPx && photo.heightPx && (
                 <>
                   <dt className="text-ink-muted">Dimensions</dt>

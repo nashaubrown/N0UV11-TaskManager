@@ -18,6 +18,7 @@ Companion to [`database-schema.sql`](./database-schema.sql). PostgreSQL 15+.
 ```
 organizations ─┬─ organization_members ── users
                ├─ teams ── team_members
+               ├─ merchants (photo categorization; links to a contact)
                ├─ projects ─┬─ tasks (self-ref parent_task_id = sub-tasks)
                │            └─ photos ─┬─ photo_versions
                │                       ├─ photo_tags (user + AI)
@@ -46,6 +47,9 @@ users ─┬─ gcal_connections (OAuth tokens, encrypted at app layer)
 
 ### Photos
 - Binary data lives in S3; the DB stores keys + metadata only.
+- `merchant_id` categorizes photos by merchant (storefront shoots, menu
+  photography, etc.); the library filters and groups on it. A merchant can
+  point at a `contacts` row for its CRM identity.
 - `photo_versions` is append-only; `version_no` increments per photo. The
   current version is the row with max `version_no` (photo row caches nothing —
   keeps writes single-purpose).

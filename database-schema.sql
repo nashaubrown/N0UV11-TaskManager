@@ -62,6 +62,19 @@ CREATE TABLE team_members (
   PRIMARY KEY (team_id, user_id)
 );
 
+-- ---------- Merchants ----------
+CREATE TABLE merchants (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  location        TEXT,                          -- e.g. 'Malé', 'Hulhumalé'
+  contact_id      UUID,                          -- FK added after contacts table
+  logo_url        TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, name)
+);
+
 -- ---------- Projects ----------
 CREATE TABLE projects (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -121,6 +134,7 @@ CREATE TABLE photos (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   project_id      UUID REFERENCES projects(id) ON DELETE SET NULL,
+  merchant_id     UUID REFERENCES merchants(id) ON DELETE SET NULL,
   uploaded_by     UUID REFERENCES users(id),
   status          photo_status NOT NULL DEFAULT 'processing',
   title           TEXT,
@@ -269,6 +283,10 @@ CREATE TABLE contacts (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE merchants
+  ADD CONSTRAINT merchants_contact_fk
+  FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL;
+
 CREATE TABLE deals (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -350,6 +368,7 @@ CREATE INDEX idx_tasks_parent          ON tasks (parent_task_id);
 CREATE INDEX idx_tasks_title_trgm      ON tasks USING gin (title gin_trgm_ops);
 CREATE INDEX idx_photos_org            ON photos (organization_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_photos_project        ON photos (project_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_photos_merchant       ON photos (merchant_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_photo_tags_tag_trgm   ON photo_tags USING gin (tag gin_trgm_ops);
 CREATE INDEX idx_comments_photo        ON comments (photo_id);
 CREATE INDEX idx_comments_task         ON comments (task_id);
@@ -367,7 +386,7 @@ $$ LANGUAGE plpgsql;
 DO $$
 DECLARE t TEXT;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['organizations','users','projects','tasks','photos','comments','contacts','deals']
+  FOREACH t IN ARRAY ARRAY['organizations','users','merchants','projects','tasks','photos','comments','contacts','deals']
   LOOP
     EXECUTE format('CREATE TRIGGER trg_%s_updated BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION set_updated_at()', t, t);
   END LOOP;

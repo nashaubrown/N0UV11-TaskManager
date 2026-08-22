@@ -2,11 +2,12 @@ import { create } from 'zustand'
 import {
   comments as seedComments,
   currentUser,
+  merchants as seedMerchants,
   photos as seedPhotos,
   projects as seedProjects,
   tasks as seedTasks,
 } from '../mocks/data'
-import type { CommentModel, Photo, Project, Task } from '../types'
+import type { CommentModel, Merchant, Photo, Project, Task } from '../types'
 
 /** Phase 1: in-memory store seeded from mocks. Phase 2 replaces the seed +
  *  mutations with TanStack Query against the real API; component code keeps
@@ -25,6 +26,7 @@ export interface NewTaskInput {
 }
 
 interface DataState {
+  merchants: Merchant[]
   projects: Project[]
   tasks: Task[]
   photos: Photo[]
@@ -32,11 +34,12 @@ interface DataState {
   addProject: (input: { name: string; description?: string }) => Project
   addTask: (input: NewTaskInput) => Task
   updateTask: (id: string, patch: Partial<Task>) => void
-  addPhotos: (files: File[], projectId?: string) => Photo[]
+  addPhotos: (files: File[], opts?: { projectId?: string; merchantId?: string }) => Photo[]
   addComment: (target: { taskId?: string; photoId?: string }, body: string) => void
 }
 
 export const useData = create<DataState>((set) => ({
+  merchants: seedMerchants,
   projects: seedProjects,
   // keep displayed comment counts honest: derive them from the seeded threads
   tasks: seedTasks.map((t) => ({ ...t, commentCount: threadCount(seedComments, (c) => c.taskId === t.id) })),
@@ -91,12 +94,13 @@ export const useData = create<DataState>((set) => ({
       ),
     })),
 
-  addPhotos: (files, projectId) => {
+  addPhotos: (files, opts) => {
     const added: Photo[] = files.map((file, i) => {
       const url = URL.createObjectURL(file)
       return {
         id: `ph${Date.now()}-${i}`,
-        projectId,
+        projectId: opts?.projectId,
+        merchantId: opts?.merchantId,
         uploadedBy: currentUser,
         status: 'ready',
         title: file.name.replace(/\.[^.]+$/, ''),

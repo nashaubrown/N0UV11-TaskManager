@@ -19,6 +19,12 @@ export interface User {
   role: UserRole
 }
 
+export interface Merchant {
+  id: string
+  name: string
+  location?: string
+}
+
 export interface Project {
   id: string
   name: string
@@ -66,6 +72,7 @@ export interface PhotoTag {
 export interface Photo {
   id: string
   projectId?: string
+  merchantId?: string
   uploadedBy?: User
   status: PhotoStatus
   title?: string
