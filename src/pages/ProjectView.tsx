@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { useRef } from 'react'
+import { ArrowLeft, Plus, Upload } from 'lucide-react'
 import { Tabs } from '../components/common/Tabs'
 import { Card, CardHeader } from '../components/common/Card'
 import { ProgressBar } from '../components/common/ProgressBar'
@@ -11,6 +12,8 @@ import { ApprovalWorkflow } from '../components/approval/ApprovalWorkflow'
 import { approvals } from '../mocks/data'
 import { projectStats, useData } from '../store/data'
 import { TaskDetail } from '../components/task/TaskDetail'
+import { TaskForm, type TaskFormValues } from '../components/task/TaskForm'
+import { Modal } from '../components/common/Modal'
 import { EmptyState } from '../components/common/EmptyState'
 import { Button } from '../components/common/Button'
 
@@ -18,11 +21,24 @@ type Tab = 'tasks' | 'photos' | 'approvals'
 
 export default function ProjectView() {
   const { projectId } = useParams()
-  const { projects, tasks, photos } = useData()
+  const { projects, tasks, photos, addTask, addPhotos } = useData()
   const project = projects.find((p) => p.id === projectId)
   const [tab, setTab] = useState<Tab>('tasks')
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  const [creatingTask, setCreatingTask] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  const createTask = (values: TaskFormValues) => {
+    addTask({ ...values, projectId })
+    setCreatingTask(false)
+  }
+
+  const ingest = (list: FileList | null) => {
+    if (!list) return
+    const images = [...list].filter((f) => f.type.startsWith('image/'))
+    if (images.length) addPhotos(images, { projectId })
+  }
 
   const projectTasks = useMemo(() => tasks.filter((t) => t.projectId === projectId), [tasks, projectId])
   const projectPhotos = useMemo(() => photos.filter((p) => p.projectId === projectId), [photos, projectId])
@@ -68,16 +84,41 @@ export default function ProjectView() {
         ]}
       />
 
-      {tab === 'tasks' && <TaskList tasks={projectTasks} onSelect={(t) => setOpenTaskId(t.id)} />}
+      {tab === 'tasks' && (
+        <div className="grid gap-3">
+          <div className="flex justify-end">
+            <Button size="sm" icon={<Plus className="size-4" />} onClick={() => setCreatingTask(true)}>
+              New task
+            </Button>
+          </div>
+          <TaskList tasks={projectTasks} onSelect={(t) => setOpenTaskId(t.id)} />
+        </div>
+      )}
       <TaskDetail taskId={openTaskId} onClose={() => setOpenTaskId(null)} />
+      <Modal open={creatingTask} onClose={() => setCreatingTask(false)} title={`New task in ${project.name}`} size="lg">
+        <TaskForm onSubmit={createTask} onCancel={() => setCreatingTask(false)} />
+      </Modal>
       {tab === 'photos' && (
-        <>
+        <div className="grid gap-3">
+          <div className="flex justify-end">
+            <Button size="sm" icon={<Upload className="size-4" />} onClick={() => fileInput.current?.click()}>
+              Upload
+            </Button>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => { ingest(e.target.files); e.target.value = '' }}
+            />
+          </div>
           <PhotoGallery
             photos={projectPhotos}
             onOpen={(p) => setViewerIndex(projectPhotos.findIndex((x) => x.id === p.id))}
           />
           <PhotoViewer photos={projectPhotos} index={viewerIndex} onClose={() => setViewerIndex(null)} onNavigate={setViewerIndex} />
-        </>
+        </div>
       )}
       {tab === 'approvals' && (
         projectApprovals.length === 0 ? (
