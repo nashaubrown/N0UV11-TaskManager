@@ -8,7 +8,9 @@ import { TaskList } from '../components/task/TaskList'
 import { PhotoGallery } from '../components/photo/PhotoGallery'
 import { PhotoViewer } from '../components/photo/PhotoViewer'
 import { ApprovalWorkflow } from '../components/approval/ApprovalWorkflow'
-import { approvals, photos, projects, tasks } from '../mocks/data'
+import { approvals } from '../mocks/data'
+import { projectStats, useData } from '../store/data'
+import { TaskDetail } from '../components/task/TaskDetail'
 import { EmptyState } from '../components/common/EmptyState'
 import { Button } from '../components/common/Button'
 
@@ -16,12 +18,15 @@ type Tab = 'tasks' | 'photos' | 'approvals'
 
 export default function ProjectView() {
   const { projectId } = useParams()
+  const { projects, tasks, photos } = useData()
   const project = projects.find((p) => p.id === projectId)
   const [tab, setTab] = useState<Tab>('tasks')
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null)
 
-  const projectTasks = useMemo(() => tasks.filter((t) => t.projectId === projectId), [projectId])
-  const projectPhotos = useMemo(() => photos.filter((p) => p.projectId === projectId), [projectId])
+  const projectTasks = useMemo(() => tasks.filter((t) => t.projectId === projectId), [tasks, projectId])
+  const projectPhotos = useMemo(() => photos.filter((p) => p.projectId === projectId), [photos, projectId])
+  const stats = projectStats(projectId ?? '', tasks, photos)
   const projectApprovals = useMemo(
     () => approvals.filter((a) => projectPhotos.some((p) => p.id === a.photoId)),
     [projectPhotos],
@@ -47,9 +52,9 @@ export default function ProjectView() {
         {project.description && <p className="text-ink-muted mt-1">{project.description}</p>}
         <ProgressBar
           className="mt-3 max-w-sm"
-          value={project.completedTaskCount}
-          max={project.taskCount}
-          label={`${project.completedTaskCount}/${project.taskCount} tasks`}
+          value={stats.completedTaskCount}
+          max={stats.taskCount}
+          label={`${stats.completedTaskCount}/${stats.taskCount} tasks`}
         />
       </div>
 
@@ -63,7 +68,8 @@ export default function ProjectView() {
         ]}
       />
 
-      {tab === 'tasks' && <TaskList tasks={projectTasks} />}
+      {tab === 'tasks' && <TaskList tasks={projectTasks} onSelect={(t) => setOpenTaskId(t.id)} />}
+      <TaskDetail taskId={openTaskId} onClose={() => setOpenTaskId(null)} />
       {tab === 'photos' && (
         <>
           <PhotoGallery

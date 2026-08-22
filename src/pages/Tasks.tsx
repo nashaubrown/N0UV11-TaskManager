@@ -6,16 +6,17 @@ import { Modal } from '../components/common/Modal'
 import { Tabs } from '../components/common/Tabs'
 import { TaskList } from '../components/task/TaskList'
 import { TaskForm, type TaskFormValues } from '../components/task/TaskForm'
-import { tasks as seed } from '../mocks/data'
-import type { Task, TaskStatus } from '../types'
+import { TaskDetail } from '../components/task/TaskDetail'
+import { useData } from '../store/data'
+import type { TaskStatus } from '../types'
 
 type Filter = 'all' | TaskStatus
 
 export default function Tasks() {
-  const [tasks, setTasks] = useState<Task[]>(seed)
+  const { tasks, addTask } = useData()
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
-  const [editing, setEditing] = useState<Task | null>(null)
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
 
   const filtered = useMemo(() => {
@@ -28,18 +29,9 @@ export default function Tasks() {
 
   const counts = (s: Filter) => (s === 'all' ? tasks.length : tasks.filter((t) => t.status === s).length)
 
-  const upsert = (values: TaskFormValues) => {
-    if (editing) {
-      setTasks((ts) => ts.map((t) => (t.id === editing.id ? { ...t, ...values } : t)))
-      setEditing(null)
-    } else {
-      setTasks((ts) => [{
-        id: `t${Date.now()}`, ...values, assignees: [], labels: [],
-        subtaskCount: 0, subtaskDoneCount: 0, commentCount: 0,
-        createdAt: new Date().toISOString(),
-      }, ...ts])
-      setCreating(false)
-    }
+  const create = (values: TaskFormValues) => {
+    addTask(values)
+    setCreating(false)
   }
 
   return (
@@ -69,20 +61,12 @@ export default function Tasks() {
         ]}
       />
 
-      <TaskList tasks={filtered} onSelect={setEditing} />
+      <TaskList tasks={filtered} onSelect={(t) => setOpenTaskId(t.id)} />
 
-      <Modal
-        open={creating || editing !== null}
-        onClose={() => { setCreating(false); setEditing(null) }}
-        title={editing ? 'Edit task' : 'New task'}
-        size="lg"
-      >
-        <TaskForm
-          key={editing?.id ?? 'new'}
-          initial={editing ?? undefined}
-          onSubmit={upsert}
-          onCancel={() => { setCreating(false); setEditing(null) }}
-        />
+      <TaskDetail taskId={openTaskId} onClose={() => setOpenTaskId(null)} />
+
+      <Modal open={creating} onClose={() => setCreating(false)} title="New task" size="lg">
+        <TaskForm onSubmit={create} onCancel={() => setCreating(false)} />
       </Modal>
     </div>
   )

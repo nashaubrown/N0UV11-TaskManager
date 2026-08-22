@@ -7,6 +7,8 @@ import { APPROVAL_STATUS_META } from '../../types'
 import { Badge } from '../common/Badge'
 import { Button } from '../common/Button'
 import { formatBytes, formatDateTime } from '../../utils/format'
+import { CommentThread } from '../common/CommentThread'
+import { useData } from '../../store/data'
 
 /** Full-screen lightbox: keyboard navigation, zoom toggle, metadata rail. */
 export function PhotoViewer({ photos, index, onClose, onNavigate }: {
@@ -17,6 +19,8 @@ export function PhotoViewer({ photos, index, onClose, onNavigate }: {
 }) {
   const photo = index === null ? null : photos[index]
   const [zoomed, setZoomed] = useState(false)
+  const { comments, addComment } = useData()
+  const photoComments = photo ? comments.filter((c) => c.photoId === photo.id) : []
 
   useEffect(() => setZoomed(false), [index])
 
@@ -128,6 +132,13 @@ export function PhotoViewer({ photos, index, onClose, onNavigate }: {
                 </div>
               </div>
             )}
+
+            <div className="mt-5 border-t border-border pt-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">
+                Comments{photoComments.length > 0 && ` · ${photo.commentCount}`}
+              </h3>
+              <CommentThread comments={photoComments} onAdd={(body) => addComment({ photoId: photo.id }, body)} />
+            </div>
           </aside>
         </motion.div>
       )}

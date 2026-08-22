@@ -50,6 +50,19 @@ export const comments: CommentModel[] = [
     { id: 'c2', photoId: 'ph3', parentId: 'c1', author: users[3], body: 'Fixed in v3, re-uploading tonight.', createdAt: day(-1) },
   ]},
   { id: 'c3', photoId: 'ph3', guestName: 'Resort Marketing (client)', body: 'Love the mood here. Can we get a warmer grade option?', createdAt: day(-1) },
+  { id: 'c4', photoId: 'ph1', author: users[1], body: 'Steam looks great against the window light — keeping this as the hero.', createdAt: day(-3) },
+  { id: 'c5', photoId: 'ph2', author: users[0], body: 'Crop tighter on the grinder? The right edge feels empty.', pinX: 0.85, pinY: 0.5, createdAt: day(-2), replies: [
+    { id: 'c6', photoId: 'ph2', parentId: 'c5', author: users[2], body: 'Will reshoot at 50mm tomorrow morning.', createdAt: day(-1) },
+  ]},
+  { id: 'c7', taskId: 't1', author: users[1], body: 'Client confirmed access from 7am — natural light window is 7:30–9:00.', createdAt: day(-2), replies: [
+    { id: 'c8', taskId: 't1', parentId: 'c7', author: users[2], body: 'Booked. Bringing the A7 IV + 35mm prime.', createdAt: day(-1) },
+  ]},
+  { id: 'c9', taskId: 't1', author: users[0], body: 'Remember: they want at least 3 landscape options for the website banner.', createdAt: day(-1) },
+  { id: 'c10', taskId: 't2', author: users[0], body: 'Round 1 selects are in the shared folder — 24 images, need to cut to 12.', createdAt: day(-2) },
+  { id: 'c11', taskId: 't2', author: users[1], body: 'My picks are starred. The latte art series is stronger than the counter shots.', createdAt: day(-1), replies: [
+    { id: 'c12', taskId: 't2', parentId: 'c11', author: users[0], body: 'Agreed — dropping counter 03 and 05.', createdAt: day(0) },
+  ]},
+  { id: 'c13', taskId: 't6', author: users[3], body: 'AI tagging is ~90% accurate on storefronts, weaker on interior detail shots.', createdAt: day(-1) },
 ]
 
 export const approvals: ApprovalRequest[] = [

@@ -4,12 +4,17 @@ import { StatTile } from '../components/common/StatTile'
 import { TrendChart } from '../components/common/TrendChart'
 import { TaskCard } from '../components/task/TaskCard'
 import { Badge } from '../components/common/Badge'
-import { completionTrend, photos, tasks, currentUser } from '../mocks/data'
+import { useState } from 'react'
+import { completionTrend, currentUser } from '../mocks/data'
+import { useData } from '../store/data'
+import { TaskDetail } from '../components/task/TaskDetail'
 import { TASK_STATUS_META, type TaskStatus } from '../types'
 
 const STATUS_ORDER: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'completed']
 
 export default function Dashboard() {
+  const { tasks, photos } = useData()
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const open = tasks.filter((t) => !['completed', 'cancelled'].includes(t.status))
   const dueSoon = open
     .filter((t) => t.dueAt)
@@ -64,9 +69,11 @@ export default function Dashboard() {
       <section>
         <h2 className="font-display font-semibold text-lg text-ink mb-3">Due next</h2>
         <div className="grid tablet:grid-cols-3 gap-3">
-          {dueSoon.map((t) => <TaskCard key={t.id} task={t} />)}
+          {dueSoon.map((t) => <TaskCard key={t.id} task={t} onClick={() => setOpenTaskId(t.id)} />)}
         </div>
       </section>
+
+      <TaskDetail taskId={openTaskId} onClose={() => setOpenTaskId(null)} />
     </div>
   )
 }
