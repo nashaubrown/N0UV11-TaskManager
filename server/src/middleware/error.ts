@@ -16,6 +16,16 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
       },
     })
   }
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021') {
+    return res.status(503).json({
+      error: {
+        code: 'schema_not_applied',
+        message:
+          'The database is reachable but has no tables — the schema was never applied. ' +
+          'Run: npm run db:apply, then npm run db:seed (from the server folder).',
+      },
+    })
+  }
   if (err instanceof Prisma.PrismaClientInitializationError) {
     console.error('DATABASE UNREACHABLE:', err.message)
     return res.status(503).json({
