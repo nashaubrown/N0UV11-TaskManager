@@ -1,7 +1,16 @@
 /** HTTP client for the NOUVII API: token storage, single-flight refresh,
  *  and a typed request helper. Demo builds never import network state. */
 
-export const DEMO = import.meta.env.MODE === 'artifact' || import.meta.env.VITE_DEMO === '1'
+/** Demo mode: the single-file artifact build, an explicit VITE_DEMO=1, or a
+ *  hosted production build with no API configured (e.g. a Vercel preview
+ *  before the backend exists) — the app then runs on in-memory demo data. */
+export const DEMO =
+  import.meta.env.MODE === 'artifact' ||
+  import.meta.env.VITE_DEMO === '1' ||
+  (import.meta.env.PROD &&
+    !import.meta.env.VITE_API_URL &&
+    typeof window !== 'undefined' &&
+    !['localhost', '127.0.0.1'].includes(window.location.hostname))
 
 const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'
 export const apiOrigin = API_URL.replace(/\/api\/?$/, '')
