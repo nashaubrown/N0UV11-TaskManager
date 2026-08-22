@@ -191,3 +191,17 @@ paths:
     post: { summary: Queue all open dated tasks for sync, responses: { '200': { description: '{queued: n}' } } }
   /calendar/connection:
     delete: { summary: Disconnect Google Calendar, responses: { '204': { description: Disconnected } } }
+  /shoots:
+    get:
+      summary: List photoshoots (filter by from/to window, status, merchant, project)
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: status, in: query, schema: { type: string, enum: [planning, confirmed, completed, cancelled] } }
+        - { name: merchantId, in: query, schema: { type: string } }
+      responses: { '200': { description: Paged shoots ordered by start time } }
+    post: { summary: Create a photoshoot (Confirmed+ shoots sync to Google Calendar), responses: { '201': { description: Created } } }
+  /shoots/{id}:
+    get: { summary: Shoot detail with crew, responses: { '200': { description: Shoot } } }
+    patch: { summary: Edit or move status (planning/confirmed/completed/cancelled); Google event follows, responses: { '200': { description: Updated } } }
+    delete: { summary: Delete shoot (removes its Google event), responses: { '204': { description: Deleted } } }

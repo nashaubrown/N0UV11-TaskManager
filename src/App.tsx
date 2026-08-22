@@ -13,6 +13,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Projects = lazy(() => import('./pages/Projects'))
 const ProjectView = lazy(() => import('./pages/ProjectView'))
 const Tasks = lazy(() => import('./pages/Tasks'))
+const Calendar = lazy(() => import('./pages/Calendar'))
 const PhotoLibrary = lazy(() => import('./pages/PhotoLibrary'))
 const Deals = lazy(() => import('./pages/Deals'))
 const Styleguide = lazy(() => import('./pages/Styleguide'))
@@ -36,6 +37,7 @@ function AppRoutes() {
         <Route path="projects" element={<Suspense fallback={<PageFallback />}><Projects /></Suspense>} />
         <Route path="projects/:projectId" element={<Suspense fallback={<PageFallback />}><ProjectView /></Suspense>} />
         <Route path="tasks" element={<Suspense fallback={<PageFallback />}><Tasks /></Suspense>} />
+        <Route path="calendar" element={<Suspense fallback={<PageFallback />}><Calendar /></Suspense>} />
         <Route path="photos" element={<Suspense fallback={<PageFallback />}><PhotoLibrary /></Suspense>} />
         <Route path="deals" element={<Suspense fallback={<PageFallback />}><Deals /></Suspense>} />
         <Route path="styleguide" element={<Suspense fallback={<PageFallback />}><Styleguide /></Suspense>} />

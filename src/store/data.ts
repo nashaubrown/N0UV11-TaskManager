@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import {
   approvals as seedApprovals,
+  shoots as seedShoots,
   comments as seedComments,
   currentUser,
   merchants as seedMerchants,
@@ -8,7 +9,7 @@ import {
   projects as seedProjects,
   tasks as seedTasks,
 } from '../mocks/data'
-import type { ApprovalRequest, CommentModel, Merchant, Photo, Project, Task } from '../types'
+import type { ApprovalRequest, CommentModel, Merchant, Photo, Project, Shoot, Task } from '../types'
 import { api, absoluteUrl, DEMO, putBytes } from '../services/api'
 
 /** App data store. Two modes behind one interface:
@@ -20,6 +21,17 @@ const threadCount = (cs: CommentModel[], pred: (c: CommentModel) => boolean) =>
   cs.filter(pred).reduce((n, c) => n + 1 + (c.replies?.length ?? 0), 0)
 
 const mapPhoto = (p: Photo): Photo => ({ ...p, url: absoluteUrl(p.url), thumbUrl: absoluteUrl(p.thumbUrl) })
+
+export interface NewShootInput {
+  title: string
+  description?: string
+  location?: string
+  startsAt: string
+  endsAt: string
+  status: Shoot['status']
+  projectId?: string
+  merchantId?: string
+}
 
 export interface NewTaskInput {
   title: string
@@ -41,12 +53,16 @@ interface DataState {
   photos: Photo[]
   comments: CommentModel[]
   approvals: ApprovalRequest[]
+  shoots: Shoot[]
   hydrate: () => Promise<void>
   addProject: (input: { name: string; description?: string }) => Promise<Project>
   addTask: (input: NewTaskInput) => Promise<Task>
   updateTask: (id: string, patch: Partial<Task> & Partial<NewTaskInput>) => Promise<void>
   addPhotos: (files: File[], opts?: { projectId?: string; merchantId?: string }) => Promise<void>
   addComment: (target: { taskId?: string; photoId?: string }, body: string) => Promise<void>
+  addShoot: (input: NewShootInput) => Promise<Shoot>
+  updateShoot: (id: string, patch: Partial<NewShootInput>) => Promise<void>
+  deleteShoot: (id: string) => Promise<void>
   loadComments: (target: { taskId?: string; photoId?: string }) => Promise<void>
   applyEvent: (type: string, payload: unknown) => void
 }
@@ -59,6 +75,7 @@ export const useData = create<DataState>((set, get) => ({
   photos: [],
   comments: [],
   approvals: [],
+  shoots: [],
 
   hydrate: async () => {
     if (get().hydrated) return
@@ -71,16 +88,18 @@ export const useData = create<DataState>((set, get) => ({
         photos: seedPhotos.map((p) => ({ ...p, commentCount: threadCount(seedComments, (c) => c.photoId === p.id) })),
         comments: seedComments,
         approvals: seedApprovals,
+        shoots: seedShoots,
       })
       return
     }
     try {
-      const [projects, tasks, photos, merchants, approvals] = await Promise.all([
+      const [projects, tasks, photos, merchants, approvals, shoots] = await Promise.all([
         api<Paged<Project>>('GET', '/projects?limit=100'),
         api<Paged<Task>>('GET', '/tasks?limit=100'),
         api<Paged<Photo>>('GET', '/photos?limit=100'),
         api<Paged<Merchant>>('GET', '/merchants'),
         api<Paged<ApprovalRequest>>('GET', '/approvals?limit=100'),
+        api<Paged<Shoot>>('GET', '/shoots?limit=500'),
       ])
       set({
         hydrated: true,
@@ -90,6 +109,7 @@ export const useData = create<DataState>((set, get) => ({
         photos: photos.items.map(mapPhoto),
         merchants: merchants.items,
         approvals: approvals.items,
+        shoots: shoots.items,
       })
     } catch (e) {
       set({ loadError: e instanceof Error ? e.message : 'Failed to load data' })
@@ -237,6 +257,36 @@ export const useData = create<DataState>((set, get) => ({
     }))
   },
 
+  addShoot: async (input) => {
+    if (DEMO) {
+      const shoot: Shoot = {
+        id: `sh${Date.now()}`,
+        ...input,
+        crew: [currentUser],
+        createdAt: new Date().toISOString(),
+      }
+      set((s) => ({ shoots: [...s.shoots, shoot] }))
+      return shoot
+    }
+    const shoot = await api<Shoot>('POST', '/shoots', input)
+    set((s) => (s.shoots.some((x) => x.id === shoot.id) ? s : { shoots: [...s.shoots, shoot] }))
+    return shoot
+  },
+
+  updateShoot: async (id, patch) => {
+    if (DEMO) {
+      set((s) => ({ shoots: s.shoots.map((x) => (x.id === id ? { ...x, ...patch } : x)) }))
+      return
+    }
+    const shoot = await api<Shoot>('PATCH', `/shoots/${id}`, patch)
+    set((s) => ({ shoots: s.shoots.map((x) => (x.id === id ? shoot : x)) }))
+  },
+
+  deleteShoot: async (id) => {
+    if (!DEMO) await api('DELETE', `/shoots/${id}`)
+    set((s) => ({ shoots: s.shoots.filter((x) => x.id !== id) }))
+  },
+
   /** WebSocket events from other clients (and echoes of our own, deduped). */
   applyEvent: (type, payload) => {
     const p = payload as any
@@ -272,6 +322,15 @@ export const useData = create<DataState>((set, get) => ({
             photos: p.photoId ? s.photos.map((x) => (x.id === p.photoId ? { ...x, commentCount: x.commentCount + 1 } : x)) : s.photos,
           }
         })
+        break
+      case 'shoot.created':
+        set((s) => (s.shoots.some((x) => x.id === p.id) ? s : { shoots: [...s.shoots, p] }))
+        break
+      case 'shoot.updated':
+        set((s) => ({ shoots: s.shoots.map((x) => (x.id === p.id ? p : x)) }))
+        break
+      case 'shoot.deleted':
+        set((s) => ({ shoots: s.shoots.filter((x) => x.id !== p.id) }))
         break
       case 'approval.updated':
         set((s) => ({

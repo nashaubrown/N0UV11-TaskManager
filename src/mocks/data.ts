@@ -1,4 +1,4 @@
-import type { Photo, Project, Task, User, CommentModel, ApprovalRequest, Merchant } from '../types'
+import type { Photo, Project, Task, User, CommentModel, ApprovalRequest, Merchant, Shoot } from '../types'
 
 export const users: User[] = [
   { id: 'u1', email: 'nashaubrown@gmail.com', fullName: 'Nashau Brown', role: 'owner' },
@@ -23,6 +23,35 @@ export const projects: Project[] = [
 ]
 
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString()
+const hours = (n: number) => new Date(Date.now() + n * 3_600_000).toISOString()
+
+export const shoots: Shoot[] = [
+  {
+    id: 'sh1', merchantId: 'm1', projectId: 'p1',
+    title: 'Espresso bar hero shoot', location: 'Café Aroma, Hulhumalé',
+    startsAt: hours(20), endsAt: hours(23), status: 'confirmed',
+    crew: [users[1], users[2]], gcalSynced: true, createdAt: day(-2),
+  },
+  {
+    id: 'sh2', merchantId: 'm2', projectId: 'p2',
+    title: 'Beach villa exteriors', location: 'Baa Atoll — north jetty',
+    startsAt: hours(96), endsAt: hours(101), status: 'planning',
+    crew: [users[3]], createdAt: day(-1),
+  },
+  {
+    id: 'sh3', merchantId: 'm4',
+    title: 'Spa treatment room set', location: 'Seaside Spa, Malé',
+    startsAt: hours(-26), endsAt: hours(-22), status: 'confirmed',
+    crew: [users[0]], gcalSynced: true, createdAt: day(-4),
+  },
+  {
+    id: 'sh4', merchantId: 'm3',
+    title: 'Storefront documentation', location: 'Malé north',
+    startsAt: hours(-80), endsAt: hours(-76), status: 'completed',
+    crew: [users[2]], createdAt: day(-6),
+  },
+]
+
 
 export const tasks: Task[] = [
   { id: 't1', projectId: 'p1', title: 'Shoot espresso bar hero images', status: 'in_progress', priority: 'high', dueAt: day(1), assignees: [users[1], users[2]], labels: [{ id: 'l1', name: 'Shoot', color: '#FF6B5B' }], subtaskCount: 3, subtaskDoneCount: 1, commentCount: 4, createdAt: day(-6) },

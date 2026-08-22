@@ -125,6 +125,43 @@ export interface ApprovalRequest {
   createdAt: string
 }
 
+export type ShootStatus = 'planning' | 'confirmed' | 'completed' | 'cancelled'
+/** Display status adds the derived states: Ongoing (confirmed, window running)
+ *  and wrap-up (confirmed, window passed). */
+export type ShootDisplayStatus = ShootStatus | 'ongoing' | 'wrap_up'
+
+export interface Shoot {
+  id: string
+  projectId?: string
+  merchantId?: string
+  title: string
+  description?: string
+  location?: string
+  startsAt: string
+  endsAt: string
+  status: ShootStatus
+  crew: User[]
+  gcalSynced?: boolean
+  createdAt: string
+}
+
+export const SHOOT_STATUS_META: Record<ShootDisplayStatus, { label: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'error' | 'brand' }> = {
+  planning: { label: 'Planning', tone: 'neutral' },
+  confirmed: { label: 'Confirmed', tone: 'info' },
+  ongoing: { label: 'Ongoing', tone: 'brand' },
+  wrap_up: { label: 'Awaiting wrap-up', tone: 'warning' },
+  completed: { label: 'Completed', tone: 'success' },
+  cancelled: { label: 'Cancelled', tone: 'neutral' },
+}
+
+/** Ongoing and the wrap-up nudge are derived from the clock, never stored. */
+export function shootDisplayStatus(shoot: Shoot, now = new Date()): ShootDisplayStatus {
+  if (shoot.status !== 'confirmed') return shoot.status
+  if (now >= new Date(shoot.startsAt) && now <= new Date(shoot.endsAt)) return 'ongoing'
+  if (now > new Date(shoot.endsAt)) return 'wrap_up'
+  return 'confirmed'
+}
+
 export interface Contact {
   id: string
   fullName: string

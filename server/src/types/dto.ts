@@ -113,6 +113,34 @@ export const createDealDto = z.object({
 })
 export const updateDealDto = createDealDto.partial()
 
+/* ---------- photoshoots ---------- */
+export const shootStatus = z.enum(['planning', 'confirmed', 'completed', 'cancelled'])
+export const createShootDto = z.object({
+  title: z.string().min(1).max(300),
+  description: z.string().max(5000).optional(),
+  location: z.string().max(300).optional(),
+  startsAt: z.string().datetime({ offset: true }),
+  endsAt: z.string().datetime({ offset: true }),
+  status: shootStatus.default('planning'),
+  projectId: z.string().uuid().optional(),
+  merchantId: z.string().uuid().optional(),
+  crewIds: z.array(z.string().uuid()).max(20).default([]),
+}).refine((v) => new Date(v.endsAt) > new Date(v.startsAt), {
+  message: 'endsAt must be after startsAt',
+  path: ['endsAt'],
+})
+export const updateShootDto = z.object({
+  title: z.string().min(1).max(300).optional(),
+  description: z.string().max(5000).optional(),
+  location: z.string().max(300).optional(),
+  startsAt: z.string().datetime({ offset: true }).optional(),
+  endsAt: z.string().datetime({ offset: true }).optional(),
+  status: shootStatus.optional(),
+  projectId: z.string().uuid().nullable().optional(),
+  merchantId: z.string().uuid().nullable().optional(),
+  crewIds: z.array(z.string().uuid()).max(20).optional(),
+})
+
 /* ---------- members ---------- */
 export const inviteMemberDto = z.object({
   email: z.string().email(),

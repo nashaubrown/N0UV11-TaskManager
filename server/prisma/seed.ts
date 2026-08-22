@@ -96,6 +96,30 @@ async function main() {
     data: { task_id: t2.id, parent_id: c.id, author_id: users[1].id, body: 'My picks are starred.' },
   })
 
+  const hour = 3_600_000
+  await prisma.photoshoots.createMany({
+    data: [
+      {
+        organization_id: org.id, merchant_id: merchants[0].id, project_id: projects[0].id,
+        title: 'Espresso bar hero shoot', location: 'Café Aroma, Hulhumalé',
+        starts_at: new Date(Date.now() + 20 * hour), ends_at: new Date(Date.now() + 23 * hour),
+        status: 'confirmed', created_by: users[0].id,
+      },
+      {
+        organization_id: org.id, merchant_id: merchants[1].id, project_id: projects[1].id,
+        title: 'Beach villa exteriors', location: 'Baa Atoll — north jetty',
+        starts_at: new Date(Date.now() + 4 * 24 * hour), ends_at: new Date(Date.now() + 4 * 24 * hour + 5 * hour),
+        status: 'planning', created_by: users[1].id,
+      },
+      {
+        organization_id: org.id, merchant_id: merchants[3].id,
+        title: 'Spa treatment room set', location: 'Seaside Spa, Malé',
+        starts_at: new Date(Date.now() - 26 * hour), ends_at: new Date(Date.now() - 22 * hour),
+        status: 'confirmed', created_by: users[0].id,   // ended, not wrapped → nudge
+      },
+    ],
+  })
+
   console.log(`Seeded org ${org.id}`)
   console.log('Login: nashaubrown@gmail.com / nouvii123')
 }

@@ -14,6 +14,7 @@ export type EventType =
   | 'photo.created' | 'photo.updated' | 'photo.deleted'
   | 'comment.created'
   | 'approval.updated'
+  | 'shoot.created' | 'shoot.updated' | 'shoot.deleted'
   | 'presence.changed'
 
 export function broadcast(organizationId: string, type: EventType, payload: unknown) {

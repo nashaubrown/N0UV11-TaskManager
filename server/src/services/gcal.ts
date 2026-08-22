@@ -83,6 +83,74 @@ export function deleteCalendarEvent(taskId: string, userId: string) {
     .catch((e) => console.error('gcal event delete failed', e))
 }
 
+/** Enqueue a sync op for a shoot write. No-op when the actor has no connection. */
+export function enqueueShootSync(shootId: string, userId: string) {
+  if (!config.google.configured) return
+  prisma.gcal_connections
+    .findUnique({ where: { user_id: userId } })
+    .then((conn) => conn && prisma.gcal_sync_queue.create({ data: { shoot_id: shootId, user_id: userId, operation: 'update' } }))
+    .catch((e) => console.error('gcal enqueue failed', e))
+}
+
+/** Remove a shoot's Google event before the row is deleted. */
+export function deleteShootEvent(shootId: string, userId: string) {
+  if (!config.google.configured) return
+  prisma.photoshoots
+    .findUnique({ where: { id: shootId } })
+    .then(async (shoot) => {
+      if (!shoot?.gcal_event_id) return
+      const creds = await freshAccessToken(userId)
+      if (!creds) return
+      await fetch(
+        `${GCAL_API}/calendars/${encodeURIComponent(creds.calendarId)}/events/${shoot.gcal_event_id}`,
+        { method: 'DELETE', headers: { authorization: `Bearer ${creds.token}` } },
+      )
+    })
+    .catch((e) => console.error('gcal shoot event delete failed', e))
+}
+
+/** Push one shoot to Google. Policy: Confirmed and Completed shoots have an
+ *  event; Planning and Cancelled do not (reverting/cancelling removes it). */
+async function pushShoot(op: { shoot_id: string | null; user_id: string }) {
+  if (!op.shoot_id) return
+  const creds = await freshAccessToken(op.user_id)
+  if (!creds) return
+  const shoot = await prisma.photoshoots.findUnique({
+    where: { id: op.shoot_id },
+    include: { merchants: true },
+  })
+  if (!shoot) return
+  const headers = { authorization: `Bearer ${creds.token}`, 'content-type': 'application/json' }
+  const base = `${GCAL_API}/calendars/${encodeURIComponent(creds.calendarId)}/events`
+
+  const wantsEvent = shoot.status === 'confirmed' || shoot.status === 'completed'
+  if (!wantsEvent) {
+    if (shoot.gcal_event_id) {
+      await fetch(`${base}/${shoot.gcal_event_id}`, { method: 'DELETE', headers })
+      await prisma.photoshoots.update({ where: { id: shoot.id }, data: { gcal_event_id: null } })
+    }
+    return
+  }
+
+  const event = {
+    summary: `📸 ${shoot.title}${shoot.merchants ? ` — ${shoot.merchants.name}` : ''}`,
+    description: shoot.description ?? undefined,
+    location: shoot.location ?? undefined,
+    start: { dateTime: shoot.starts_at.toISOString() },
+    end: { dateTime: shoot.ends_at.toISOString() },
+    status: 'confirmed',
+  }
+  const res = shoot.gcal_event_id
+    ? await fetch(`${base}/${shoot.gcal_event_id}`, { method: 'PATCH', headers, body: JSON.stringify(event) })
+    : await fetch(base, { method: 'POST', headers, body: JSON.stringify(event) })
+  if (!res.ok) throw new Error(`Google Calendar shoot write failed: ${res.status} ${await res.text()}`)
+  const saved = (await res.json()) as { id: string }
+  await prisma.photoshoots.update({
+    where: { id: shoot.id },
+    data: { gcal_event_id: saved.id, gcal_synced_at: new Date() },
+  })
+}
+
 /** Enqueue a sync op for a task write. No-op when the actor has no connection. */
 export function enqueueCalendarSync(taskId: string, userId: string, operation: 'create' | 'update') {
   if (!config.google.configured) return
@@ -92,7 +160,8 @@ export function enqueueCalendarSync(taskId: string, userId: string, operation: '
     .catch((e) => console.error('gcal enqueue failed', e))
 }
 
-async function pushTask(op: { task_id: string; user_id: string; operation: string }) {
+async function pushTask(op: { task_id: string | null; user_id: string; operation: string }) {
+  if (!op.task_id) return
   const creds = await freshAccessToken(op.user_id)
   if (!creds) return // connection removed since enqueue
   const task = await prisma.tasks.findUnique({ where: { id: op.task_id } })
@@ -137,7 +206,8 @@ export function startSyncWorker() {
       if (job.processed_at && Date.now() - job.processed_at.getTime() < wait) continue
       await prisma.gcal_sync_queue.update({ where: { id: job.id }, data: { status: 'in_flight' } })
       try {
-        await pushTask(job)
+        if (job.shoot_id) await pushShoot(job)
+        else await pushTask(job)
         await prisma.gcal_sync_queue.update({
           where: { id: job.id },
           data: { status: 'done', processed_at: new Date() },

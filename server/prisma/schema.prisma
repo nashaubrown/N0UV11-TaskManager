@@ -171,7 +171,7 @@ model gcal_connections {
 
 model gcal_sync_queue {
   id           BigInt         @id @default(autoincrement())
-  task_id      String         @db.Uuid
+  task_id      String?        @db.Uuid
   user_id      String         @db.Uuid
   operation    sync_operation
   status       sync_status    @default(queued)
@@ -179,7 +179,9 @@ model gcal_sync_queue {
   last_error   String?
   created_at   DateTime       @default(now()) @db.Timestamptz(6)
   processed_at DateTime?      @db.Timestamptz(6)
-  tasks        tasks          @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  shoot_id     String?        @db.Uuid
+  photoshoots  photoshoots?   @relation(fields: [shoot_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks        tasks?         @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users        users          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
@@ -195,6 +197,7 @@ model merchants {
   contacts        contacts?     @relation(fields: [contact_id], references: [id], onUpdate: NoAction, map: "merchants_contact_fk")
   organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   photos          photos[]
+  photoshoots     photoshoots[]
 
   @@unique([organization_id, name])
 }
@@ -236,6 +239,7 @@ model organizations {
   merchants            merchants[]
   organization_members organization_members[]
   photos               photos[]
+  photoshoots          photoshoots[]
   projects             projects[]
   share_links          share_links[]
   task_labels          task_labels[]
@@ -332,6 +336,7 @@ model projects {
   created_at                             DateTime      @default(now()) @db.Timestamptz(6)
   updated_at                             DateTime      @default(now()) @db.Timestamptz(6)
   photos_photos_project_idToprojects     photos[]      @relation("photos_project_idToprojects")
+  photoshoots                            photoshoots[]
   photos_projects_cover_photo_idTophotos photos?       @relation("projects_cover_photo_idTophotos", fields: [cover_photo_id], references: [id], onUpdate: NoAction, map: "projects_cover_photo_fk")
   users                                  users?        @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
   organizations                          organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -470,12 +475,56 @@ model users {
   photo_tags                                                  photo_tags[]
   photo_versions                                              photo_versions[]
   photos                                                      photos[]
+  photoshoots                                                 photoshoots[]
   projects                                                    projects[]
   refresh_tokens                                              refresh_tokens[]
   share_links                                                 share_links[]
+  shoot_crew                                                  shoot_crew[]
   task_assignees                                              task_assignees[]
   tasks                                                       tasks[]
   team_members                                                team_members[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model photoshoots {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String            @db.Uuid
+  project_id      String?           @db.Uuid
+  merchant_id     String?           @db.Uuid
+  title           String
+  description     String?
+  location        String?
+  starts_at       DateTime          @db.Timestamptz(6)
+  ends_at         DateTime          @db.Timestamptz(6)
+  status          shoot_status      @default(planning)
+  created_by      String?           @db.Uuid
+  gcal_event_id   String?
+  gcal_synced_at  DateTime?         @db.Timestamptz(6)
+  created_at      DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime          @default(now()) @db.Timestamptz(6)
+  gcal_sync_queue gcal_sync_queue[]
+  users           users?            @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  merchants       merchants?        @relation(fields: [merchant_id], references: [id], onUpdate: NoAction)
+  organizations   organizations     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  projects        projects?         @relation(fields: [project_id], references: [id], onUpdate: NoAction)
+  shoot_crew      shoot_crew[]
+
+  @@index([organization_id, starts_at], map: "idx_shoots_org_time")
+  @@index([organization_id, status], map: "idx_shoots_status")
+}
+
+model schema_migrations {
+  name       String   @id
+  applied_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model shoot_crew {
+  shoot_id    String      @db.Uuid
+  user_id     String      @db.Uuid
+  photoshoots photoshoots @relation(fields: [shoot_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users       users       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([shoot_id, user_id])
 }
 
 enum ai_tag_status {
@@ -549,4 +598,11 @@ enum user_role {
   manager
   member
   viewer
+}
+
+enum shoot_status {
+  planning
+  confirmed
+  completed
+  cancelled
 }
