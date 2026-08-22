@@ -124,3 +124,9 @@ NOUVII branding: coral gradient `#FF6B5B → #C41E3A`, Sora (display) + Inter (b
 8px-based spacing, 4-step elevation. Accessibility baked in: WCAG-checked status
 colors per theme, a dedicated chart-stroke token (≥3:1 on both surfaces), focus
 rings, labels on every status pill (never color alone), reduced-motion support.
+
+## Deployment
+
+Frontend: Vercel (`vercel.json` handles SPA rewrites). A hosted build with no
+`VITE_API_URL` env var runs in demo mode; set `VITE_API_URL` to the hosted
+API's `/api` base URL to switch the same deployment to the real backend.
