@@ -19,6 +19,7 @@ import { contactsRouter, dealsRouter } from './routes/crm.js'
 import { orgRouter } from './routes/org.js'
 import { calendarRouter } from './routes/calendar.js'
 import { shootsRouter } from './routes/shoots.js'
+import { pushRouter } from './routes/push.js'
 
 export function createApp() {
   const app = express()
@@ -50,6 +51,7 @@ export function createApp() {
   app.use('/api/org', orgRouter)
   app.use('/api/calendar', calendarRouter)
   app.use('/api/shoots', shootsRouter)
+  app.use('/api/push', pushRouter)
 
   // API docs at /api/docs
   try {

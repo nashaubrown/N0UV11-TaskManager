@@ -56,7 +56,13 @@ function Gate() {
     if (DEMO || user) {
       void hydrate()
       connectRealtime()
-      return disconnectRealtime
+      const flush = () => void useData.getState().flushOfflineUploads()
+      flush() // retry anything queued while offline last session
+      window.addEventListener('online', flush)
+      return () => {
+        window.removeEventListener('online', flush)
+        disconnectRealtime()
+      }
     }
   }, [user, hydrate])
 

@@ -9,6 +9,7 @@ import { pageParams, paged } from '../lib/pagination.js'
 import { param } from '../lib/params.js'
 import { audit } from '../services/audit.js'
 import { broadcast } from '../ws/hub.js'
+import { pushToUsers } from '../services/push.js'
 
 export const approvalsRouter = Router()
 approvalsRouter.use(requireAuth)
@@ -132,5 +133,16 @@ approvalsRouter.post('/:id/decisions', requireRole('member'), validate(decisionD
   const out = await assemble(r.id)
   audit(req, `approval.${action}`, 'photo', r.photo_id, { requestId: r.id, step: r.current_step })
   broadcast(req.auth!.organizationId, 'approval.updated', out)
+  if (r.requested_by && r.requested_by !== req.auth!.userId) {
+    const labels: Record<string, string> = {
+      approve: 'approved', reject: 'rejected', request_changes: 'needs changes', comment: 'commented on',
+    }
+    pushToUsers([r.requested_by], {
+      title: `Photo ${labels[action] ?? action}`,
+      body: feedback?.slice(0, 120) ?? 'An approval you requested was updated.',
+      url: '/photos',
+      tag: `approval-${r.id}`,
+    })
+  }
   res.status(201).json(out)
 })

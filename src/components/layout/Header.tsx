@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Bell, LogOut, Menu, Moon, Search, Sun } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Bell, BellRing, LogOut, Menu, Moon, Search, Sun } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '../common/Button'
 import { Avatar } from '../common/Avatar'
@@ -7,12 +7,31 @@ import { useTheme } from '../../store/theme'
 import { useUi } from '../../store/ui'
 import { useAuth } from '../../store/auth'
 import { DEMO } from '../../services/api'
+import { currentSubscription, disablePush, enablePush, pushSupported } from '../../services/push'
 
 export function Header() {
   const { theme, toggle } = useTheme()
   const setSidebarOpen = useUi((s) => s.setSidebarOpen)
   const { user, logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [pushState, setPushState] = useState<'unsupported' | 'off' | 'on'>('unsupported')
+
+  useEffect(() => {
+    void (async () => {
+      if (!(await pushSupported())) return
+      setPushState((await currentSubscription()) ? 'on' : 'off')
+    })()
+  }, [])
+
+  const togglePush = async () => {
+    if (pushState === 'on') {
+      await disablePush()
+      setPushState('off')
+    } else if (pushState === 'off') {
+      const ok = await enablePush().catch(() => false)
+      setPushState(ok ? 'on' : 'off')
+    }
+  }
 
   return (
     <header className="sticky top-0 z-30 h-14 bg-surface/90 backdrop-blur border-b border-border flex items-center gap-3 px-4">
@@ -68,6 +87,16 @@ export function Header() {
                   <span className="block font-medium text-ink truncate">{user.fullName}</span>
                   <span className="block text-xs text-ink-muted truncate">{user.email}</span>
                 </p>
+                {pushState !== 'unsupported' && (
+                  <button
+                    onClick={() => void togglePush()}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-(--nv-radius-sm) text-sm text-ink-2 hover:bg-surface-2 transition-colors"
+                  >
+                    {pushState === 'on'
+                      ? <><BellRing className="size-4 text-success" aria-hidden /> Notifications on</>
+                      : <><Bell className="size-4" aria-hidden /> Enable notifications</>}
+                  </button>
+                )}
                 {!DEMO && (
                   <button
                     onClick={logout}

@@ -11,6 +11,7 @@ import { param } from '../lib/params.js'
 import { audit } from '../services/audit.js'
 import { broadcast } from '../ws/hub.js'
 import { deleteCalendarEvent, enqueueCalendarSync } from '../services/gcal.js'
+import { pushToUsers } from '../services/push.js'
 import { createCommentDto } from '../types/dto.js'
 
 export const tasksRouter = Router()
@@ -72,6 +73,10 @@ tasksRouter.post('/', requireRole('member'), validate(createTaskDto), async (req
   const out = sTask(task)
   audit(req, 'task.create', 'task', task.id, { title: task.title })
   broadcast(req.auth!.organizationId, 'task.created', out)
+  pushToUsers(
+    b.assigneeIds.filter((id: string) => id !== req.auth!.userId),
+    { title: 'New task assigned', body: task.title, url: '/tasks', tag: `task-${task.id}` },
+  )
   enqueueCalendarSync(task.id, req.auth!.userId, 'create')
   res.status(201).json(out)
 })
@@ -157,5 +162,13 @@ tasksRouter.post('/:id/comments', requireRole('member'), validate(createCommentD
   const out = sComment(comment)
   audit(req, 'comment.create', 'task', param(req, 'id'))
   broadcast(req.auth!.organizationId, 'comment.created', out)
+  const task = await prisma.tasks.findUnique({
+    where: { id: param(req, 'id') },
+    include: { task_assignees: true },
+  })
+  pushToUsers(
+    (task?.task_assignees ?? []).map((a) => a.user_id).filter((id) => id !== req.auth!.userId),
+    { title: `Comment on: ${task?.title ?? 'a task'}`, body: req.body.body.slice(0, 120), url: '/tasks', tag: `task-${param(req, 'id')}` },
+  )
   res.status(201).json(out)
 })

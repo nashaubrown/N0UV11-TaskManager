@@ -11,6 +11,7 @@ import {
 } from '../mocks/data'
 import type { ApprovalRequest, CommentModel, Merchant, Photo, Project, Shoot, Task } from '../types'
 import { api, absoluteUrl, DEMO, putBytes } from '../services/api'
+import { enqueueUpload, flushQueue } from '../services/offlineQueue'
 
 /** App data store. Two modes behind one interface:
  *  - demo (artifact preview / VITE_DEMO=1): in-memory, seeded from mocks
@@ -46,6 +47,7 @@ interface Paged<T> { items: T[] }
 
 interface DataState {
   hydrated: boolean
+  pendingUploads: number
   loadError?: string
   merchants: Merchant[]
   projects: Project[]
@@ -64,11 +66,14 @@ interface DataState {
   updateShoot: (id: string, patch: Partial<NewShootInput>) => Promise<void>
   deleteShoot: (id: string) => Promise<void>
   loadComments: (target: { taskId?: string; photoId?: string }) => Promise<void>
+  flushOfflineUploads: () => Promise<void>
+  uploadOne: (file: Blob, fileName: string, contentType: string, opts?: { projectId?: string; merchantId?: string }) => Promise<void>
   applyEvent: (type: string, payload: unknown) => void
 }
 
 export const useData = create<DataState>((set, get) => ({
   hydrated: false,
+  pendingUploads: 0,
   merchants: [],
   projects: [],
   tasks: [],
@@ -205,23 +210,50 @@ export const useData = create<DataState>((set, get) => ({
       set((s) => ({ photos: [...added, ...s.photos] }))
       return
     }
-    // real flow: presign → PUT bytes → register; photos appear as each lands
+    // real flow: presign → PUT bytes → register; photos appear as each lands.
+    // Network failures queue the file in IndexedDB for retry when back online.
     for (const file of files) {
-      const presign = await api<{ key: string; uploadUrl: string; headers: Record<string, string> }>(
-        'POST', '/uploads/presign',
-        { fileName: file.name, contentType: file.type || 'image/jpeg', sizeBytes: file.size },
-      )
-      await putBytes(presign.uploadUrl, file, presign.headers)
-      const photo = await api<Photo>('POST', '/photos', {
-        s3Key: presign.key,
-        title: file.name.replace(/\.[^.]+$/, ''),
-        contentType: file.type || 'image/jpeg',
-        sizeBytes: file.size,
-        projectId: opts?.projectId,
-        merchantId: opts?.merchantId,
-      })
-      set((s) => ({ photos: s.photos.some((p) => p.id === photo.id) ? s.photos : [mapPhoto(photo), ...s.photos] }))
+      try {
+        await get().uploadOne(file, file.name, file.type || 'image/jpeg', opts)
+      } catch (e) {
+        const offline = !navigator.onLine || (e instanceof Error && e.message.startsWith('Cannot reach'))
+        if (!offline) throw e
+        await enqueueUpload({
+          file,
+          fileName: file.name,
+          contentType: file.type || 'image/jpeg',
+          projectId: opts?.projectId,
+          merchantId: opts?.merchantId,
+        })
+        set((s) => ({ pendingUploads: s.pendingUploads + 1 }))
+      }
     }
+  },
+
+  /** One presign → PUT → register cycle. Internal, also used by the flusher. */
+  uploadOne: async (file: Blob, fileName: string, contentType: string, opts?: { projectId?: string; merchantId?: string }) => {
+    const presign = await api<{ key: string; uploadUrl: string; headers: Record<string, string> }>(
+      'POST', '/uploads/presign',
+      { fileName, contentType, sizeBytes: file.size },
+    )
+    await putBytes(presign.uploadUrl, file as File, presign.headers)
+    const photo = await api<Photo>('POST', '/photos', {
+      s3Key: presign.key,
+      title: fileName.replace(/\.[^.]+$/, ''),
+      contentType,
+      sizeBytes: file.size,
+      projectId: opts?.projectId,
+      merchantId: opts?.merchantId,
+    })
+    set((s) => ({ photos: s.photos.some((p) => p.id === photo.id) ? s.photos : [mapPhoto(photo), ...s.photos] }))
+  },
+
+  flushOfflineUploads: async () => {
+    if (DEMO) return
+    const done = await flushQueue((item) =>
+      get().uploadOne(item.file, item.fileName, item.contentType, { projectId: item.projectId, merchantId: item.merchantId }),
+    )
+    if (done > 0) set((s) => ({ pendingUploads: Math.max(0, s.pendingUploads - done) }))
   },
 
   addComment: async ({ taskId, photoId }, body) => {

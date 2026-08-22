@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react'
-import { Download, ImagePlus, LayoutGrid, Rows3, Search, Store, Trash2, Upload, X } from 'lucide-react'
+import { Camera, CloudOff, Download, ImagePlus, LayoutGrid, Rows3, Search, Store, Trash2, Upload, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { Button } from '../components/common/Button'
@@ -21,7 +21,7 @@ const FILTER_MATCH: Record<Exclude<Filter, 'all'>, ApprovalStatus[]> = {
 }
 
 export default function PhotoLibrary() {
-  const { photos, merchants, addPhotos } = useData()
+  const { photos, merchants, addPhotos, pendingUploads } = useData()
   const [filter, setFilter] = useState<Filter>('all')
   const [merchantFilter, setMerchantFilter] = useState<MerchantFilter>('all')
   const [grouped, setGrouped] = useState(false)
@@ -29,6 +29,7 @@ export default function PhotoLibrary() {
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [dragging, setDragging] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  const cameraInput = useRef<HTMLInputElement>(null)
   const { selectedPhotoIds, clearPhotoSelection } = useUi()
 
   const merchantName = (id?: string) => merchants.find((m) => m.id === id)?.name
@@ -103,12 +104,34 @@ export default function PhotoLibrary() {
     >
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="font-display font-bold text-2xl text-ink">Photo Library</h1>
-        <Button icon={<Upload className="size-4" />} onClick={() => fileInput.current?.click()}>Upload</Button>
+        <div className="flex items-center gap-2">
+          {pendingUploads > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-sm text-warning" role="status">
+              <CloudOff className="size-4" aria-hidden /> {pendingUploads} waiting for connection
+            </span>
+          )}
+          <Button
+            variant="secondary"
+            className="tablet:hidden"
+            aria-label="Take photo"
+            icon={<Camera className="size-4" />}
+            onClick={() => cameraInput.current?.click()}
+          />
+          <Button icon={<Upload className="size-4" />} onClick={() => fileInput.current?.click()}>Upload</Button>
+        </div>
         <input
           ref={fileInput}
           type="file"
           accept="image/*"
           multiple
+          className="hidden"
+          onChange={(e) => { ingest(e.target.files); e.target.value = '' }}
+        />
+        <input
+          ref={cameraInput}
+          type="file"
+          accept="image/*"
+          capture="environment"
           className="hidden"
           onChange={(e) => { ingest(e.target.files); e.target.value = '' }}
         />

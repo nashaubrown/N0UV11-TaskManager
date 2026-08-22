@@ -374,6 +374,16 @@ CREATE TABLE gcal_sync_queue (
   CHECK (num_nonnulls(task_id, shoot_id) = 1)
 );
 
+-- ---------- Web Push ----------
+CREATE TABLE push_subscriptions (
+  endpoint   TEXT PRIMARY KEY,
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  p256dh     TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_push_subs_user ON push_subscriptions (user_id);
+
 -- ---------- Auth ----------
 CREATE TABLE refresh_tokens (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

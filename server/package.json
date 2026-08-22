@@ -26,6 +26,7 @@
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.0",
     "swagger-ui-express": "^5.0.1",
+    "web-push": "^3.6.7",
     "ws": "^8.21.3",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
@@ -37,6 +38,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.2.0",
     "@types/swagger-ui-express": "^4.1.8",
+    "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.1",
     "prisma": "^6.19.3",
     "tsx": "^4.23.12",
