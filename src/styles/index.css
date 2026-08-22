@@ -1,0 +1,79 @@
+@import './tokens.css';
+@import 'tailwindcss';
+
+/* Map NOUVII tokens into Tailwind v4 theme */
+@theme inline {
+  --color-brand: var(--nv-coral);
+  --color-brand-deep: var(--nv-deep-red);
+  --color-bg: var(--nv-bg);
+  --color-surface: var(--nv-surface);
+  --color-surface-2: var(--nv-surface-2);
+  --color-border: var(--nv-border);
+  --color-ink: var(--nv-ink);
+  --color-ink-2: var(--nv-ink-2);
+  --color-ink-muted: var(--nv-ink-muted);
+  --color-ink-faint: var(--nv-ink-faint);
+  --color-on-brand: var(--nv-on-brand);
+  --color-success: var(--nv-success);
+  --color-warning: var(--nv-warning);
+  --color-error: var(--nv-error);
+  --color-info: var(--nv-info);
+  --color-success-bg: var(--nv-success-bg);
+  --color-warning-bg: var(--nv-warning-bg);
+  --color-error-bg: var(--nv-error-bg);
+  --color-info-bg: var(--nv-info-bg);
+
+  --font-display: var(--nv-font-display);
+  --font-body: var(--nv-font-body);
+
+  --radius-sm: var(--nv-radius-sm);
+  --radius-md: var(--nv-radius-md);
+  --radius-lg: var(--nv-radius-lg);
+
+  --shadow-sm: var(--nv-shadow-sm);
+  --shadow-md: var(--nv-shadow-md);
+  --shadow-lg: var(--nv-shadow-lg);
+  --shadow-xl: var(--nv-shadow-xl);
+
+  --breakpoint-tablet: 768px;
+  --breakpoint-desktop: 1024px;
+  --breakpoint-wide: 1440px;
+}
+
+/* Base */
+html, body, #root { height: 100%; }
+body {
+  background: var(--nv-bg);
+  color: var(--nv-ink);
+  font-family: var(--nv-font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color var(--nv-dur) var(--nv-ease);
+}
+
+h1, h2, h3, h4 { font-family: var(--nv-font-display); }
+
+/* Brand gradient utilities */
+.nv-gradient { background: var(--nv-gradient); }
+.nv-gradient-soft { background: var(--nv-gradient-soft); }
+.nv-gradient-text {
+  background: var(--nv-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Focus ring — visible in both themes */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--nv-coral);
+  outline-offset: 2px;
+  border-radius: var(--nv-radius-sm);
+}
+
+/* Scrollbar (subtle) */
+* { scrollbar-width: thin; scrollbar-color: var(--nv-border) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
