@@ -10,9 +10,9 @@ backend (Phase 2), PostgreSQL, AWS S3, installable PWA (Phase 3).
 |---|---|---|
 | 1 | Design system, component library, layouts, pages | ✅ Done |
 | 2 | Express API, auth, Google Calendar sync | ✅ Done |
-| 3 | PWA — offline, camera, push | ⏳ Next |
-| 4 | Claude Vision auto-tagging | — |
-| 5 | Client approval portal | — |
+| 3 | PWA — offline, camera, push | ✅ Done |
+| 4 | Claude Vision auto-tagging | ✅ Done |
+| 5 | Client approval portal | ✅ Done |
 
 ## Quick start
 
@@ -55,6 +55,23 @@ broadcast live to every open tab over WebSocket.
 
 **Demo mode** (no backend): `npm run dev:demo` — runs on in-memory mock data,
 no login. The shareable artifact preview uses this mode.
+
+## Optional integrations (all inert until configured in server/.env)
+
+| Feature | Enable with |
+|---|---|
+| Google Calendar sync | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` (OAuth client, redirect `http://localhost:4000/api/calendar/callback`) |
+| Claude Vision auto-tagging | `ANTHROPIC_API_KEY` (model via `AI_MODEL`, default `claude-opus-5`) |
+| Web push notifications | `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` (`npx web-push generate-vapid-keys`) + `VAPID_SUBJECT` |
+| S3 storage | `STORAGE_DRIVER=s3` + `S3_BUCKET`/`S3_REGION` (+ `S3_PUBLIC_BASE_URL` for CloudFront) |
+
+## Client review portal
+
+"Share for review" on any project creates a signed, 30-day link
+(`/portal/<token>` — only a hash is stored). Clients need no account: they
+see the project's photos, approve / reject / request changes, and comment.
+Every action is recorded with their name in the audit log and lands in the
+team's UI live over WebSocket.
 
 Open **/styleguide** in the app for the living component catalog (all variants and
 states — flip the header theme toggle to QA dark mode).

@@ -20,6 +20,7 @@ import { orgRouter } from './routes/org.js'
 import { calendarRouter } from './routes/calendar.js'
 import { shootsRouter } from './routes/shoots.js'
 import { pushRouter } from './routes/push.js'
+import { portalRouter, shareLinksRouter } from './routes/portal.js'
 
 export function createApp() {
   const app = express()
@@ -52,6 +53,8 @@ export function createApp() {
   app.use('/api/calendar', calendarRouter)
   app.use('/api/shoots', shootsRouter)
   app.use('/api/push', pushRouter)
+  app.use('/api/share-links', shareLinksRouter)
+  app.use('/api/portal', portalRouter)
 
   // API docs at /api/docs
   try {

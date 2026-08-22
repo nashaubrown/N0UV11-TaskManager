@@ -8,6 +8,7 @@ import { useData } from './store/data'
 import { connectRealtime, disconnectRealtime } from './services/ws'
 import { DEMO } from './services/api'
 import Login from './pages/Login'
+import Portal from './pages/Portal'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Projects = lazy(() => import('./pages/Projects'))
@@ -48,6 +49,9 @@ function AppRoutes() {
 
 function Gate() {
   const { ready, user, init } = useAuth()
+  // the client portal is public — no login, its own data fetching
+  const portalMatch = window.location.pathname.match(/^\/portal\/([^/]+)/) ??
+    window.location.hash.match(/^#\/portal\/([^/]+)/)
   const hydrate = useData((s) => s.hydrate)
 
   useEffect(() => { void init() }, [init])
@@ -66,6 +70,7 @@ function Gate() {
     }
   }, [user, hydrate])
 
+  if (portalMatch) return <Portal token={decodeURIComponent(portalMatch[1])} />
   if (!DEMO && !ready) return <PageFallback />
   if (!DEMO && !user) return <Login />
   return <AppRoutes />

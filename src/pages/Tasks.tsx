@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Download, Plus, Search } from 'lucide-react'
 import { Button } from '../components/common/Button'
 import { Input } from '../components/common/Input'
 import { Modal } from '../components/common/Modal'
@@ -29,6 +29,27 @@ export default function Tasks() {
 
   const counts = (s: Filter) => (s === 'all' ? tasks.length : tasks.filter((t) => t.status === s).length)
 
+  const exportCsv = () => {
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const rows = [
+      ['Title', 'Status', 'Priority', 'Due', 'Assignees', 'Comments', 'Created'],
+      ...filtered.map((t) => [
+        t.title, t.status, t.priority,
+        t.dueAt ? new Date(t.dueAt).toLocaleDateString() : '',
+        t.assignees.map((a) => a.fullName).join('; '),
+        t.commentCount,
+        new Date(t.createdAt).toLocaleDateString(),
+      ]),
+    ]
+    const csv = rows.map((r) => r.map(esc).join(',')).join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `nouvii-tasks-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const create = (values: TaskFormValues) => {
     addTask(values)
     setCreating(false)
@@ -38,7 +59,12 @@ export default function Tasks() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="font-display font-bold text-2xl text-ink">Tasks</h1>
-        <Button icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>New task</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" icon={<Download className="size-4" />} onClick={exportCsv}>
+            Export CSV
+          </Button>
+          <Button icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>New task</Button>
+        </div>
       </div>
 
       <Input
