@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Route, Routes } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './services/queryClient'
 import { AppShell } from './components/layout/AppShell'
@@ -20,10 +20,13 @@ function PageFallback() {
   )
 }
 
+// Single-file preview builds have no server-side routing — use hash URLs there.
+const Router = import.meta.env.MODE === 'artifact' ? HashRouter : BrowserRouter
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <Router>
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<Suspense fallback={<PageFallback />}><Dashboard /></Suspense>} />
@@ -35,7 +38,7 @@ export default function App() {
             <Route path="styleguide" element={<Suspense fallback={<PageFallback />}><Styleguide /></Suspense>} />
           </Route>
         </Routes>
-      </BrowserRouter>
+      </Router>
     </QueryClientProvider>
   )
 }

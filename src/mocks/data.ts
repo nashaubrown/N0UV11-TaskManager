@@ -29,7 +29,10 @@ export const tasks: Task[] = [
 ]
 
 /* Photos use picsum seeds so the gallery renders offline-agnostic placeholders. */
-const pic = (seed: string, _w = 800, _h = 600) => `/demo/${seed}.svg`
+import { DEMO_IMAGES } from './demoImages'
+
+const pic = (seed: string, _w = 800, _h = 600) =>
+  import.meta.env.MODE === 'artifact' ? DEMO_IMAGES[seed] : `/demo/${seed}.svg`
 
 export const photos: Photo[] = [
   { id: 'ph1', projectId: 'p1', uploadedBy: users[1], status: 'ready', title: 'Espresso pour, morning light', url: pic('nv1', 1200, 900), thumbUrl: pic('nv1', 480, 360), contentType: 'image/jpeg', sizeBytes: 2_412_000, widthPx: 4032, heightPx: 3024, capturedAt: '2026-08-18T07:42:00Z', deviceModel: 'iPhone 15 Pro', tags: [{ id: 'g1', tag: 'coffee', source: 'ai', aiStatus: 'accepted', confidence: 0.97 }, { id: 'g2', tag: 'interior', source: 'user' }], approvalStatus: 'approved', commentCount: 3, versionCount: 2, createdAt: '2026-08-18T08:00:00Z' },
