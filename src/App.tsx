@@ -20,7 +20,6 @@ const Deals = lazy(() => import('./pages/Deals'))
 const Merchants = lazy(() => import('./pages/Merchants'))
 const Team = lazy(() => import('./pages/Team'))
 const MerchantProfile = lazy(() => import('./pages/MerchantProfile'))
-const Styleguide = lazy(() => import('./pages/Styleguide'))
 
 function PageFallback() {
   return (
@@ -47,7 +46,6 @@ function AppRoutes() {
         <Route path="merchants/:merchantId" element={<Suspense fallback={<PageFallback />}><MerchantProfile /></Suspense>} />
         <Route path="deals" element={<Suspense fallback={<PageFallback />}><Deals /></Suspense>} />
         <Route path="team" element={<Suspense fallback={<PageFallback />}><Team /></Suspense>} />
-        <Route path="styleguide" element={<Suspense fallback={<PageFallback />}><Styleguide /></Suspense>} />
       </Route>
     </Routes>
   )

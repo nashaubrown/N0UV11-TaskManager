@@ -127,6 +127,27 @@ rings, labels on every status pill (never color alone), reduced-motion support.
 
 ## Deployment
 
-Frontend: Vercel (`vercel.json` handles SPA rewrites). A hosted build with no
-`VITE_API_URL` env var runs in demo mode; set `VITE_API_URL` to the hosted
-API's `/api` base URL to switch the same deployment to the real backend.
+**Frontend — Vercel** (`vercel.json` handles SPA rewrites). A hosted build
+with no `VITE_API_URL` env var runs in demo mode; set `VITE_API_URL` to the
+hosted API's `/api` base URL to switch the same deployment to the real
+backend.
+
+**Backend — Render** (one blueprint, `render.yaml`):
+
+1. [render.com](https://render.com) → **New +** → **Blueprint** → connect
+   GitHub → select this repo → review the plans → **Apply**. This creates
+   the `nouvii-api` service and its Postgres database, generates
+   `JWT_SECRET`, applies the schema on every deploy, and mounts a 1 GB disk
+   for photo storage.
+2. When the service is live, copy its URL (e.g.
+   `https://nouvii-api.onrender.com`).
+3. Vercel → project → *Settings* → *Environment Variables* → add
+   `VITE_API_URL` = `https://<your-api>.onrender.com/api` → redeploy.
+4. Open the production site and **Sign Up** to create your real workspace
+   (don't seed demo data into production).
+5. Google Calendar callback: also add
+   `GOOGLE_REDIRECT_URI=https://<your-api>.onrender.com/api/calendar/callback`
+   to the Google OAuth client and Render env when enabling calendar sync.
+
+Photos are stored on the service's persistent disk; switch to S3/CloudFront
+at scale via `STORAGE_DRIVER=s3` + `S3_BUCKET`/`S3_REGION`.
