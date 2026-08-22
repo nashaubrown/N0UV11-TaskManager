@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { CalendarDays, CheckSquare, FolderKanban, Handshake, Image, LayoutDashboard, Store, Users } from 'lucide-react'
+import { CalendarDays, ChartColumn, CheckSquare, FolderKanban, Handshake, Image, LayoutDashboard, Store, Users } from 'lucide-react'
 import clsx from 'clsx'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useUi } from '../../store/ui'
@@ -13,6 +13,7 @@ export const NAV_ITEMS = [
   { to: '/photos', label: 'Photo Library', icon: Image },
   { to: '/merchants', label: 'Merchants', icon: Store },
   { to: '/deals', label: 'Deals', icon: Handshake },
+  { to: '/analytics', label: 'Analytics', icon: ChartColumn },
   { to: '/team', label: 'Team', icon: Users },
 ]
 

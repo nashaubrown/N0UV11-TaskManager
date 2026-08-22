@@ -13,12 +13,27 @@ const money = (cents: number | undefined, currency: string) =>
     ? '—'
     : new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(cents / 100)
 
-function DealCard({ deal, onMove }: { deal: Deal; onMove: (stage: DealStage) => void }) {
+function DealCard({ deal, onMove, onDragStart, onDragEnd, dragging }: {
+  deal: Deal
+  onMove: (stage: DealStage) => void
+  onDragStart: () => void
+  onDragEnd: () => void
+  dragging: boolean
+}) {
   const idx = DEAL_STAGES.indexOf(deal.stage)
   const prev = idx > 0 ? DEAL_STAGES[idx - 1] : null
   const next = idx < DEAL_STAGES.length - 1 ? DEAL_STAGES[idx + 1] : null
   return (
-    <div className="rounded-(--nv-radius-md) border border-border bg-surface p-3 grid gap-1.5 shadow-sm">
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={clsx(
+        'rounded-(--nv-radius-md) border border-border bg-surface p-3 grid gap-1.5 shadow-sm',
+        'cursor-grab active:cursor-grabbing',
+        dragging && 'opacity-40',
+      )}
+    >
       <p className="text-sm font-medium text-ink leading-snug">{deal.name}</p>
       <p className="text-sm text-ink-2 font-semibold tabular-nums">{money(deal.valueCents, deal.currency)}</p>
       {deal.contact && (
@@ -51,6 +66,8 @@ function DealCard({ deal, onMove }: { deal: Deal; onMove: (stage: DealStage) => 
 
 export default function Deals() {
   const { deals, contacts, addDeal, updateDeal, addContact } = useData()
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overStage, setOverStage] = useState<DealStage | null>(null)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [value, setValue] = useState('')
@@ -122,7 +139,18 @@ export default function Deals() {
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-2 items-start">
           {byStage.map(({ stage: s, deals: stageDeals, total }) => (
-            <section key={s} className="w-64 shrink-0 grid gap-2">
+            <section
+              key={s}
+              className="w-64 shrink-0 grid gap-2"
+              onDragOver={(e) => { e.preventDefault(); setOverStage(s) }}
+              onDragLeave={() => setOverStage((cur) => (cur === s ? null : cur))}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (dragId) void updateDeal(dragId, { stage: s })
+                setDragId(null)
+                setOverStage(null)
+              }}
+            >
               <header className={clsx(
                 'flex items-center gap-2 px-1',
                 (s === 'closed_won' || s === 'closed_lost') && 'opacity-80',
@@ -131,9 +159,19 @@ export default function Deals() {
                 <span className="text-xs text-ink-muted tabular-nums">{stageDeals.length}</span>
                 {total > 0 && <span className="ml-auto text-xs text-ink-faint tabular-nums">{money(total, 'USD')}</span>}
               </header>
-              <div className="grid gap-2 min-h-16 rounded-(--nv-radius-md) bg-surface-2/60 p-2">
+              <div className={clsx(
+                'grid gap-2 min-h-16 rounded-(--nv-radius-md) p-2 transition-colors',
+                overStage === s && dragId ? 'bg-info-bg outline-2 outline-dashed outline-info' : 'bg-surface-2/60',
+              )}>
                 {stageDeals.map((d) => (
-                  <DealCard key={d.id} deal={d} onMove={(to) => void updateDeal(d.id, { stage: to })} />
+                  <DealCard
+                    key={d.id}
+                    deal={d}
+                    onMove={(to) => void updateDeal(d.id, { stage: to })}
+                    onDragStart={() => setDragId(d.id)}
+                    onDragEnd={() => { setDragId(null); setOverStage(null) }}
+                    dragging={dragId === d.id}
+                  />
                 ))}
                 {stageDeals.length === 0 && (
                   <p className="text-xs text-ink-faint text-center py-4">Empty</p>

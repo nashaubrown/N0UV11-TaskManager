@@ -64,6 +64,9 @@ no login. The shareable artifact preview uses this mode.
 | Claude Vision auto-tagging | `ANTHROPIC_API_KEY` (model via `AI_MODEL`, default `claude-opus-5`) |
 | Web push notifications | `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` (`npx web-push generate-vapid-keys`) + `VAPID_SUBJECT` |
 | S3 storage | `STORAGE_DRIVER=s3` + `S3_BUCKET`/`S3_REGION` (+ `S3_PUBLIC_BASE_URL` for CloudFront) |
+| Cloudflare R2 storage | as S3, plus `S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com` (+ `S3_PUBLIC_BASE_URL` = your `r2.dev` or custom domain). Create the bucket + an R2 API token (Object Read & Write) in the Cloudflare dashboard; the token's key/secret go in the usual `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` |
+| Google Drive backup | every uploaded photo is mirrored to a Drive folder. Create a service account (Google Cloud → IAM → Service Accounts → key as JSON), share the target Drive folder with the service account's email, then set `GDRIVE_SERVICE_ACCOUNT_JSON` (the JSON, single line) + `GDRIVE_FOLDER_ID` (from the folder URL) |
+| Instagram analytics | `META_APP_ID` + `META_APP_SECRET` from a Business app at developers.facebook.com with **Facebook Login for Business**; register `META_REDIRECT_URL` (default `http://localhost:4000/api/analytics/oauth/callback`) as a valid OAuth redirect. Merchants connect on the **Analytics** page — their IG must be a professional account linked to a Facebook Page |
 
 ## Client review portal
 
@@ -73,8 +76,9 @@ see the project's photos, approve / reject / request changes, and comment.
 Every action is recorded with their name in the audit log and lands in the
 team's UI live over WebSocket.
 
-Open **/styleguide** in the app for the living component catalog (all variants and
-states — flip the header theme toggle to QA dark mode).
+Reviewers can also **draw directly on a photo** (Draw on photo → coral pen,
+undo/clear) — the markup is saved with their comment and shows up overlaid
+on the photo in the team's comment thread.
 
 ## Stack decisions (Phase 1)
 

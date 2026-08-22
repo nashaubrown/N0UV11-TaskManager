@@ -2,7 +2,8 @@ import { Router } from 'express'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma.js'
 import { notFound } from '../lib/errors.js'
-import { requireAuth, requireRole } from '../middleware/auth.js'
+import { requireAuth } from '../middleware/auth.js'
+import { requireCapability } from '../lib/permissions.js'
 import { validate } from '../middleware/validate.js'
 import { createShootDto, updateShootDto } from '../types/dto.js'
 import { sShoot } from '../lib/serialize.js'
@@ -47,7 +48,7 @@ shootsRouter.get('/', async (req, res) => {
 })
 
 /** POST /shoots */
-shootsRouter.post('/', requireRole('member'), validate(createShootDto), async (req, res) => {
+shootsRouter.post('/', requireCapability('calendar.manage'), validate(createShootDto), async (req, res) => {
   const b = req.body
   const shoot = await prisma.photoshoots.create({
     data: {
@@ -78,7 +79,7 @@ shootsRouter.get('/:id', async (req, res) => {
 })
 
 /** PATCH /shoots/:id — status moves and edits both land here. */
-shootsRouter.patch('/:id', requireRole('member'), validate(updateShootDto), async (req, res) => {
+shootsRouter.patch('/:id', requireCapability('calendar.manage'), validate(updateShootDto), async (req, res) => {
   const existing = await loadShoot(req.auth!.organizationId, param(req, 'id'))
   const b = req.body
   const shoot = await prisma.photoshoots.update({
@@ -110,7 +111,7 @@ shootsRouter.patch('/:id', requireRole('member'), validate(updateShootDto), asyn
 })
 
 /** DELETE /shoots/:id */
-shootsRouter.delete('/:id', requireRole('member'), async (req, res) => {
+shootsRouter.delete('/:id', requireCapability('calendar.manage'), async (req, res) => {
   await loadShoot(req.auth!.organizationId, param(req, 'id'))
   deleteShootEvent(param(req, 'id'), req.auth!.userId)
   await prisma.photoshoots.delete({ where: { id: param(req, 'id') } })

@@ -3,7 +3,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { badRequest, notFound } from '../lib/errors.js'
-import { requireAuth, requireRole } from '../middleware/auth.js'
+import { requireAuth } from '../middleware/auth.js'
+import { requireCapability } from '../lib/permissions.js'
 import { validate } from '../middleware/validate.js'
 import { param } from '../lib/params.js'
 import { publicUrlFor } from '../services/storage.js'
@@ -35,6 +36,7 @@ export async function feedItemsFor(merchantId: string) {
       photoId: i.photo_id,
       position: i.position,
       caption: i.caption ?? undefined,
+      scheduledAt: i.scheduled_at?.toISOString(),
       title: i.photos.title ?? undefined,
       url: publicUrlFor(i.photos.s3_key),
       thumbUrl: publicUrlFor(i.photos.thumb_s3_key ?? i.photos.s3_key),
@@ -48,7 +50,7 @@ feedRouter.get('/:id/feed', async (req, res) => {
 })
 
 /** POST /merchants/:id/feed — add an approved photo to the top of the plan. */
-feedRouter.post('/:id/feed', requireRole('member'), validate(z.object({ photoId: z.string().uuid() })), async (req, res) => {
+feedRouter.post('/:id/feed', requireCapability('feed.manage'), validate(z.object({ photoId: z.string().uuid() })), async (req, res) => {
   const merchant = await loadMerchant(req.auth!.organizationId, param(req, 'id'))
   const photo = await prisma.photos.findFirst({
     where: { id: req.body.photoId, organization_id: req.auth!.organizationId, deleted_at: null },
@@ -69,7 +71,7 @@ feedRouter.post('/:id/feed', requireRole('member'), validate(z.object({ photoId:
 })
 
 /** PATCH /merchants/:id/feed — reorder: body {order: [photoId, ...]} top-left first. */
-feedRouter.patch('/:id/feed', requireRole('member'), validate(z.object({ order: z.array(z.string().uuid()).max(200) })), async (req, res) => {
+feedRouter.patch('/:id/feed', requireCapability('feed.manage'), validate(z.object({ order: z.array(z.string().uuid()).max(200) })), async (req, res) => {
   const merchant = await loadMerchant(req.auth!.organizationId, param(req, 'id'))
   await prisma.$transaction(
     req.body.order.map((photoId: string, i: number) =>
@@ -83,19 +85,26 @@ feedRouter.patch('/:id/feed', requireRole('member'), validate(z.object({ order: 
   res.json({ items: await feedItemsFor(merchant.id) })
 })
 
-/** PATCH /merchants/:id/feed/:photoId — edit the caption. */
-feedRouter.patch('/:id/feed/:photoId', requireRole('member'), validate(z.object({ caption: z.string().max(2200) })), async (req, res) => {
+/** PATCH /merchants/:id/feed/:photoId — edit the caption and/or planned slot. */
+feedRouter.patch('/:id/feed/:photoId', requireCapability('feed.manage'), validate(z.object({
+  caption: z.string().max(2200).optional(),
+  scheduledAt: z.string().datetime({ offset: true }).nullable().optional(),
+})), async (req, res) => {
   const merchant = await loadMerchant(req.auth!.organizationId, param(req, 'id'))
+  const data: { caption?: string; scheduled_at?: Date | null } = {}
+  if (req.body.caption !== undefined) data.caption = req.body.caption
+  if (req.body.scheduledAt !== undefined) data.scheduled_at = req.body.scheduledAt ? new Date(req.body.scheduledAt) : null
+  if (!Object.keys(data).length) throw badRequest('Nothing to update')
   const { count } = await prisma.feed_plan_items.updateMany({
     where: { merchant_id: merchant.id, photo_id: param(req, 'photoId') },
-    data: { caption: req.body.caption },
+    data,
   })
   if (!count) throw notFound('Feed item')
   res.json({ ok: true })
 })
 
 /** DELETE /merchants/:id/feed/:photoId */
-feedRouter.delete('/:id/feed/:photoId', requireRole('member'), async (req, res) => {
+feedRouter.delete('/:id/feed/:photoId', requireCapability('feed.manage'), async (req, res) => {
   const merchant = await loadMerchant(req.auth!.organizationId, param(req, 'id'))
   await prisma.feed_plan_items.deleteMany({
     where: { merchant_id: merchant.id, photo_id: param(req, 'photoId') },
@@ -106,7 +115,7 @@ feedRouter.delete('/:id/feed/:photoId', requireRole('member'), async (req, res) 
 
 /** POST /merchants/:id/feed/:photoId/caption-ai — draft an IG caption from
  *  the photo's Claude Vision analysis (falls back to basic facts). */
-feedRouter.post('/:id/feed/:photoId/caption-ai', requireRole('member'), async (req, res) => {
+feedRouter.post('/:id/feed/:photoId/caption-ai', requireCapability('feed.manage'), async (req, res) => {
   if (!aiConfigured) throw badRequest('AI captions need ANTHROPIC_API_KEY configured on the server')
   const merchant = await loadMerchant(req.auth!.organizationId, param(req, 'id'))
   const photo = await prisma.photos.findFirst({

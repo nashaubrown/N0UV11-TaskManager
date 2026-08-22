@@ -9,6 +9,7 @@ import { requireAuth, signAccessToken } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { loginDto, refreshDto, signupDto } from '../types/dto.js'
 import { audit } from '../services/audit.js'
+import { effectiveCapabilities } from '../lib/permissions.js'
 
 export const authRouter = Router()
 
@@ -120,5 +121,14 @@ authRouter.post('/logout', validate(refreshDto), async (req, res) => {
 authRouter.get('/me', requireAuth, async (req, res) => {
   const user = await prisma.users.findUnique({ where: { id: req.auth!.userId } })
   if (!user) throw unauthorized()
-  res.json({ user: publicUser(user), organizationId: req.auth!.organizationId, role: req.auth!.role })
+  const membership = await prisma.organization_members.findUnique({
+    where: { organization_id_user_id: { organization_id: req.auth!.organizationId, user_id: user.id } },
+  })
+  const role = membership?.role ?? req.auth!.role
+  res.json({
+    user: publicUser(user),
+    organizationId: req.auth!.organizationId,
+    role,
+    capabilities: [...(await effectiveCapabilities(req.auth!.organizationId, user.id, role))],
+  })
 })

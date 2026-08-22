@@ -4,7 +4,8 @@ import rateLimit from 'express-rate-limit'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { badRequest, forbidden, notFound } from '../lib/errors.js'
-import { requireAuth, requireRole } from '../middleware/auth.js'
+import { requireAuth } from '../middleware/auth.js'
+import { requireCapability } from '../lib/permissions.js'
 import { validate } from '../middleware/validate.js'
 import { param } from '../lib/params.js'
 import { publicUrlFor } from '../services/storage.js'
@@ -37,7 +38,7 @@ const createLinkDto = z.object({
   expiresInDays: z.number().int().min(1).max(365).optional(),
 })
 
-shareLinksRouter.post('/', requireRole('member'), validate(createLinkDto), async (req, res) => {
+shareLinksRouter.post('/', requireCapability('portal.share'), validate(createLinkDto), async (req, res) => {
   const project = await prisma.projects.findFirst({
     where: { id: req.body.projectId, organization_id: req.auth!.organizationId },
   })
@@ -92,7 +93,7 @@ shareLinksRouter.get('/', async (req, res) => {
   })
 })
 
-shareLinksRouter.delete('/:id', requireRole('member'), async (req, res) => {
+shareLinksRouter.delete('/:id', requireCapability('portal.share'), async (req, res) => {
   const { count } = await prisma.share_links.updateMany({
     where: { id: param(req, 'id'), organization_id: req.auth!.organizationId, revoked_at: null },
     data: { revoked_at: new Date() },
@@ -165,6 +166,7 @@ portalRouter.get('/:token', async (req, res) => {
         author: c.users?.full_name ?? c.guest_name ?? 'Guest',
         isGuest: !c.users,
         body: c.body,
+        annotation: c.annotation ?? undefined,
         createdAt: c.created_at,
         replies: c.other_comments.map((r) => ({
           id: r.id,
@@ -251,7 +253,10 @@ portalRouter.post(
 /** POST /portal/:token/photos/:photoId/comments */
 portalRouter.post(
   '/:token/photos/:photoId/comments',
-  validate(guestDto.extend({ body: z.string().min(1).max(10_000) })),
+  validate(guestDto.extend({
+    body: z.string().min(1).max(10_000),
+    annotation: z.string().regex(/^data:image\/png;base64,/).max(600_000).optional(),
+  })),
   async (req, res) => {
     const link = await resolveLink(param(req, 'token'))
     if (!link.can_comment) throw forbidden('This review link does not allow comments')
@@ -261,7 +266,7 @@ portalRouter.post(
     if (!photo) throw notFound('Photo')
 
     const comment = await prisma.comments.create({
-      data: { photo_id: photo.id, guest_name: `${req.body.guestName} (client)`, body: req.body.body },
+      data: { photo_id: photo.id, guest_name: `${req.body.guestName} (client)`, body: req.body.body, annotation: req.body.annotation },
     })
     prisma.audit_log.create({
       data: {
@@ -274,8 +279,8 @@ portalRouter.post(
       },
     }).catch(() => {})
     broadcast(link.organization_id, 'comment.created', {
-      id: comment.id, photoId: photo.id, guestName: comment.guest_name, body: comment.body, createdAt: comment.created_at,
+      id: comment.id, photoId: photo.id, guestName: comment.guest_name, body: comment.body, annotation: comment.annotation ?? undefined, createdAt: comment.created_at,
     })
-    res.status(201).json({ id: comment.id, author: comment.guest_name, body: comment.body, createdAt: comment.created_at })
+    res.status(201).json({ id: comment.id, author: comment.guest_name, body: comment.body, annotation: comment.annotation ?? undefined, createdAt: comment.created_at })
   },
 )

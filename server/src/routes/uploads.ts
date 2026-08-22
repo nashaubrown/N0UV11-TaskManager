@@ -1,5 +1,6 @@
 import { Router, raw } from 'express'
-import { requireAuth, requireRole } from '../middleware/auth.js'
+import { requireAuth } from '../middleware/auth.js'
+import { requireCapability } from '../lib/permissions.js'
 import { validate } from '../middleware/validate.js'
 import { presignDto } from '../types/dto.js'
 import { localGet, localPut, presignUpload } from '../services/storage.js'
@@ -11,7 +12,7 @@ export const uploadsRouter = Router()
 
 /** POST /uploads/presign — returns {key, uploadUrl, headers, publicUrl}.
  *  Client PUTs the bytes to uploadUrl, then registers via POST /photos. */
-uploadsRouter.post('/presign', requireAuth, requireRole('member'), validate(presignDto), async (req, res) => {
+uploadsRouter.post('/presign', requireAuth, requireCapability('photos.upload'), validate(presignDto), async (req, res) => {
   res.json(await presignUpload(req.body.fileName, req.body.contentType))
 })
 

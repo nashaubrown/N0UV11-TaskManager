@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { notFound } from '../lib/errors.js'
-import { requireAuth, requireRole } from '../middleware/auth.js'
+import { requireAuth } from '../middleware/auth.js'
+import { requireCapability } from '../lib/permissions.js'
 import { validate } from '../middleware/validate.js'
 import { createMerchantDto } from '../types/dto.js'
 import { sMerchant } from '../lib/serialize.js'
@@ -22,7 +23,7 @@ merchantsRouter.get('/', async (req, res) => {
 })
 
 /** POST /merchants */
-merchantsRouter.post('/', requireRole('member'), validate(createMerchantDto), async (req, res) => {
+merchantsRouter.post('/', requireCapability('merchants.manage'), validate(createMerchantDto), async (req, res) => {
   const merchant = await prisma.merchants.create({
     data: { organization_id: req.auth!.organizationId, name: req.body.name, location: req.body.location, ig_handle: req.body.igHandle, bio: req.body.bio },
   })
@@ -31,7 +32,7 @@ merchantsRouter.post('/', requireRole('member'), validate(createMerchantDto), as
 })
 
 /** PATCH /merchants/:id */
-merchantsRouter.patch('/:id', requireRole('member'), validate(createMerchantDto.partial()), async (req, res) => {
+merchantsRouter.patch('/:id', requireCapability('merchants.manage'), validate(createMerchantDto.partial()), async (req, res) => {
   const { count } = await prisma.merchants.updateMany({
     where: { id: param(req, 'id'), organization_id: req.auth!.organizationId },
     data: { name: req.body.name, location: req.body.location, ig_handle: req.body.igHandle, bio: req.body.bio },
@@ -41,7 +42,7 @@ merchantsRouter.patch('/:id', requireRole('member'), validate(createMerchantDto.
 })
 
 /** DELETE /merchants/:id — photos keep existing but lose the link. */
-merchantsRouter.delete('/:id', requireRole('manager'), async (req, res) => {
+merchantsRouter.delete('/:id', requireCapability('merchants.manage'), async (req, res) => {
   const { count } = await prisma.merchants.deleteMany({
     where: { id: param(req, 'id'), organization_id: req.auth!.organizationId },
   })

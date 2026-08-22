@@ -148,6 +148,7 @@ CREATE TABLE photos (
   size_bytes      BIGINT NOT NULL,
   width_px        INTEGER,
   height_px       INTEGER,
+  gdrive_file_id  TEXT,                          -- Google Drive backup mirror
   -- capture metadata (EXIF)
   captured_at     TIMESTAMPTZ,
   device_model    TEXT,
@@ -321,6 +322,7 @@ CREATE TABLE feed_plan_items (
   photo_id    UUID NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
   position    INTEGER NOT NULL DEFAULT 0,
   caption     TEXT,
+  scheduled_at TIMESTAMPTZ,
   added_by    UUID REFERENCES users(id),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (merchant_id, photo_id)
@@ -386,6 +388,16 @@ CREATE TABLE gcal_sync_queue (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   processed_at TIMESTAMPTZ,
   CHECK (num_nonnulls(task_id, shoot_id) = 1)
+);
+
+-- ---------- Per-user capability overrides ----------
+CREATE TABLE member_permission_overrides (
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  capability      TEXT NOT NULL,
+  allowed         BOOLEAN NOT NULL,             -- true = granted, false = revoked
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (organization_id, user_id, capability)
 );
 
 -- ---------- Web Push ----------
@@ -463,3 +475,59 @@ BEGIN
     EXECUTE format('CREATE TRIGGER trg_%s_updated BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION set_updated_at()', t, t);
   END LOOP;
 END $$;
+
+-- ---------- Social analytics (Instagram via Meta Graph API) ----------
+-- Mirrors server/migrations/006_social_analytics.sql
+
+CREATE TABLE social_accounts (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id  UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  merchant_id      UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+  platform         TEXT NOT NULL DEFAULT 'instagram',
+  ig_user_id       TEXT NOT NULL,
+  username         TEXT,
+  access_token     TEXT NOT NULL,
+  token_expires_at TIMESTAMPTZ,
+  connected_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+  connected_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_synced_at   TIMESTAMPTZ,
+  UNIQUE (merchant_id, platform)
+);
+CREATE INDEX idx_social_accounts_org ON social_accounts (organization_id);
+
+CREATE TABLE social_metrics_daily (
+  account_id     UUID NOT NULL REFERENCES social_accounts(id) ON DELETE CASCADE,
+  day            DATE NOT NULL,
+  followers      INTEGER,
+  media_count    INTEGER,
+  reach          INTEGER,
+  impressions    INTEGER,
+  profile_views  INTEGER,
+  website_clicks INTEGER,
+  PRIMARY KEY (account_id, day)
+);
+
+CREATE TABLE social_posts (
+  account_id     UUID NOT NULL REFERENCES social_accounts(id) ON DELETE CASCADE,
+  ig_media_id    TEXT NOT NULL,
+  caption        TEXT,
+  media_type     TEXT,
+  thumbnail_url  TEXT,
+  permalink      TEXT,
+  posted_at      TIMESTAMPTZ,
+  like_count     INTEGER,
+  comments_count INTEGER,
+  reach          INTEGER,
+  saved          INTEGER,
+  last_synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_id, ig_media_id)
+);
+CREATE INDEX idx_social_posts_time ON social_posts (account_id, posted_at DESC);
+
+CREATE TABLE social_online_times (
+  account_id UUID NOT NULL REFERENCES social_accounts(id) ON DELETE CASCADE,
+  dow        SMALLINT NOT NULL,
+  hour       SMALLINT NOT NULL,
+  value      DOUBLE PRECISION NOT NULL DEFAULT 0,
+  PRIMARY KEY (account_id, dow, hour)
+);

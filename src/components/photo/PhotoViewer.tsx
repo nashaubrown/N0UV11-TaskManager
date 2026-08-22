@@ -209,7 +209,7 @@ export function PhotoViewer({ photos, index, onClose, onNavigate }: {
               <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">
                 Comments{photoComments.length > 0 && ` · ${photo.commentCount}`}
               </h3>
-              <CommentThread comments={photoComments} onAdd={(body) => addComment({ photoId: photo.id }, body)} />
+              <CommentThread comments={photoComments} onAdd={(body) => addComment({ photoId: photo.id }, body)} annotationBase={photo.url} />
             </div>
           </aside>
         </motion.div>

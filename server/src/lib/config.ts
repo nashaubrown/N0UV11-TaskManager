@@ -20,9 +20,25 @@ export const config = {
     localDir: process.env.STORAGE_LOCAL_DIR ?? './uploads',
     s3: {
       bucket: process.env.S3_BUCKET ?? '',
-      region: process.env.S3_REGION ?? 'us-east-1',
-      publicBaseUrl: process.env.S3_PUBLIC_BASE_URL ?? '', // CloudFront domain
+      region: process.env.S3_REGION ?? 'auto',
+      endpoint: process.env.S3_ENDPOINT ?? '',       // e.g. Cloudflare R2 endpoint
+      publicBaseUrl: process.env.S3_PUBLIC_BASE_URL ?? '', // CDN / r2.dev domain
     },
+  },
+  gdrive: {
+    serviceAccountJson: process.env.GDRIVE_SERVICE_ACCOUNT_JSON ?? '',
+    folderId: process.env.GDRIVE_FOLDER_ID ?? '',
+    get configured() { return Boolean(this.serviceAccountJson && this.folderId) },
+  },
+  /** First CORS origin doubles as the web app origin for OAuth redirects. */
+  get webOrigin() {
+    return process.env.WEB_ORIGIN ?? (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',')[0].trim()
+  },
+  meta: {
+    appId: process.env.META_APP_ID ?? '',
+    appSecret: process.env.META_APP_SECRET ?? '',
+    redirectUrl: process.env.META_REDIRECT_URL ?? 'http://localhost:4000/api/analytics/oauth/callback',
+    get configured() { return Boolean(this.appId && this.appSecret) },
   },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',

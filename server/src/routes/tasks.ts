@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma.js'
 import { notFound } from '../lib/errors.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
+import { requireCapability } from '../lib/permissions.js'
 import { validate } from '../middleware/validate.js'
 import { bulkStatusDto, createTaskDto, updateTaskDto } from '../types/dto.js'
 import { sTask, sComment } from '../lib/serialize.js'
@@ -53,7 +54,7 @@ tasksRouter.get('/', async (req, res) => {
 })
 
 /** POST /tasks */
-tasksRouter.post('/', requireRole('member'), validate(createTaskDto), async (req, res) => {
+tasksRouter.post('/', requireCapability('tasks.manage'), validate(createTaskDto), async (req, res) => {
   const b = req.body
   const task = await prisma.tasks.create({
     data: {
@@ -82,7 +83,7 @@ tasksRouter.post('/', requireRole('member'), validate(createTaskDto), async (req
 })
 
 /** POST /tasks/bulk-status */
-tasksRouter.post('/bulk-status', requireRole('member'), validate(bulkStatusDto), async (req, res) => {
+tasksRouter.post('/bulk-status', requireCapability('tasks.manage'), validate(bulkStatusDto), async (req, res) => {
   const { taskIds, status } = req.body
   const { count } = await prisma.tasks.updateMany({
     where: { id: { in: taskIds }, organization_id: req.auth!.organizationId },
@@ -105,7 +106,7 @@ tasksRouter.get('/:id', async (req, res) => {
 })
 
 /** PATCH /tasks/:id */
-tasksRouter.patch('/:id', requireRole('member'), validate(updateTaskDto), async (req, res) => {
+tasksRouter.patch('/:id', requireCapability('tasks.manage'), validate(updateTaskDto), async (req, res) => {
   await loadTask(req.auth!.organizationId, param(req, 'id'))
   const b = req.body
   const task = await prisma.tasks.update({
@@ -132,7 +133,7 @@ tasksRouter.patch('/:id', requireRole('member'), validate(updateTaskDto), async 
 })
 
 /** DELETE /tasks/:id */
-tasksRouter.delete('/:id', requireRole('member'), async (req, res) => {
+tasksRouter.delete('/:id', requireCapability('tasks.manage'), async (req, res) => {
   await loadTask(req.auth!.organizationId, param(req, 'id'))
   deleteCalendarEvent(param(req, 'id'), req.auth!.userId)
   await prisma.tasks.delete({ where: { id: param(req, 'id') } })
