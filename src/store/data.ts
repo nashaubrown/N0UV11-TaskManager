@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import {
   approvals as seedApprovals,
   shoots as seedShoots,
+  contacts as seedContacts,
+  deals as seedDeals,
   comments as seedComments,
   currentUser,
   merchants as seedMerchants,
@@ -9,7 +11,7 @@ import {
   projects as seedProjects,
   tasks as seedTasks,
 } from '../mocks/data'
-import type { ApprovalRequest, CommentModel, Merchant, Photo, Project, Shoot, Task } from '../types'
+import type { ApprovalRequest, CommentModel, Contact, Deal, DealStage, Merchant, Photo, Project, Shoot, Task } from '../types'
 import { api, absoluteUrl, DEMO, putBytes } from '../services/api'
 import { enqueueUpload, flushQueue } from '../services/offlineQueue'
 
@@ -56,6 +58,8 @@ interface DataState {
   comments: CommentModel[]
   approvals: ApprovalRequest[]
   shoots: Shoot[]
+  deals: Deal[]
+  contacts: Contact[]
   hydrate: () => Promise<void>
   addProject: (input: { name: string; description?: string }) => Promise<Project>
   addTask: (input: NewTaskInput) => Promise<Task>
@@ -66,6 +70,11 @@ interface DataState {
   updateShoot: (id: string, patch: Partial<NewShootInput>) => Promise<void>
   deleteShoot: (id: string) => Promise<void>
   setAiTagStatus: (photoId: string, tagId: string, status: 'accepted' | 'rejected') => Promise<void>
+  addDeal: (input: { name: string; stage: DealStage; valueCents?: number; currency: string; contactId?: string }) => Promise<void>
+  updateDeal: (id: string, patch: { stage?: DealStage; name?: string; valueCents?: number }) => Promise<void>
+  addContact: (input: { fullName: string; email?: string; phone?: string; company?: string }) => Promise<Contact>
+  addMerchant: (input: { name: string; location?: string }) => Promise<void>
+  updateMerchant: (id: string, patch: { name?: string; location?: string }) => Promise<void>
   loadComments: (target: { taskId?: string; photoId?: string }) => Promise<void>
   flushOfflineUploads: () => Promise<void>
   uploadOne: (file: Blob, fileName: string, contentType: string, opts?: { projectId?: string; merchantId?: string }) => Promise<void>
@@ -82,6 +91,8 @@ export const useData = create<DataState>((set, get) => ({
   comments: [],
   approvals: [],
   shoots: [],
+  deals: [],
+  contacts: [],
 
   hydrate: async () => {
     if (get().hydrated) return
@@ -95,17 +106,21 @@ export const useData = create<DataState>((set, get) => ({
         comments: seedComments,
         approvals: seedApprovals,
         shoots: seedShoots,
+        deals: seedDeals,
+        contacts: seedContacts,
       })
       return
     }
     try {
-      const [projects, tasks, photos, merchants, approvals, shoots] = await Promise.all([
+      const [projects, tasks, photos, merchants, approvals, shoots, deals, contacts] = await Promise.all([
         api<Paged<Project>>('GET', '/projects?limit=100'),
         api<Paged<Task>>('GET', '/tasks?limit=100'),
         api<Paged<Photo>>('GET', '/photos?limit=100'),
         api<Paged<Merchant>>('GET', '/merchants'),
         api<Paged<ApprovalRequest>>('GET', '/approvals?limit=100'),
         api<Paged<Shoot>>('GET', '/shoots?limit=500'),
+        api<Paged<Deal>>('GET', '/deals?limit=100'),
+        api<Paged<Contact>>('GET', '/contacts?limit=100'),
       ])
       set({
         hydrated: true,
@@ -116,6 +131,8 @@ export const useData = create<DataState>((set, get) => ({
         merchants: merchants.items,
         approvals: approvals.items,
         shoots: shoots.items,
+        deals: deals.items,
+        contacts: contacts.items,
       })
     } catch (e) {
       set({ loadError: e instanceof Error ? e.message : 'Failed to load data' })
@@ -333,6 +350,63 @@ export const useData = create<DataState>((set, get) => ({
     }
     const photo = await api<Photo>('PATCH', `/photos/${photoId}/tags/${tagId}`, { aiStatus: status })
     set((s) => ({ photos: s.photos.map((p) => (p.id === photoId ? mapPhoto(photo) : p)) }))
+  },
+
+  addDeal: async (input) => {
+    if (DEMO) {
+      const deal: Deal = {
+        id: `d${Date.now()}`,
+        name: input.name,
+        stage: input.stage,
+        valueCents: input.valueCents,
+        currency: input.currency,
+        contact: input.contactId ? get().contacts.find((c) => c.id === input.contactId) : undefined,
+        taskCount: 0,
+        photoCount: 0,
+      }
+      set((s) => ({ deals: [deal, ...s.deals] }))
+      return
+    }
+    const deal = await api<Deal>('POST', '/deals', input)
+    set((s) => ({ deals: [deal, ...s.deals] }))
+  },
+
+  updateDeal: async (id, patch) => {
+    if (DEMO) {
+      set((s) => ({ deals: s.deals.map((d) => (d.id === id ? { ...d, ...patch } : d)) }))
+      return
+    }
+    const deal = await api<Deal>('PATCH', `/deals/${id}`, patch)
+    set((s) => ({ deals: s.deals.map((d) => (d.id === id ? deal : d)) }))
+  },
+
+  addContact: async (input) => {
+    if (DEMO) {
+      const contact: Contact = { id: `ct${Date.now()}`, ...input }
+      set((s) => ({ contacts: [...s.contacts, contact] }))
+      return contact
+    }
+    const contact = await api<Contact>('POST', '/contacts', input)
+    set((s) => ({ contacts: [...s.contacts, contact] }))
+    return contact
+  },
+
+  addMerchant: async (input) => {
+    if (DEMO) {
+      set((s) => ({ merchants: [...s.merchants, { id: `m${Date.now()}`, ...input }] }))
+      return
+    }
+    const merchant = await api<Merchant>('POST', '/merchants', input)
+    set((s) => ({ merchants: [...s.merchants, merchant] }))
+  },
+
+  updateMerchant: async (id, patch) => {
+    if (DEMO) {
+      set((s) => ({ merchants: s.merchants.map((m) => (m.id === id ? { ...m, ...patch } : m)) }))
+      return
+    }
+    const merchant = await api<Merchant>('PATCH', `/merchants/${id}`, patch)
+    set((s) => ({ merchants: s.merchants.map((m) => (m.id === id ? merchant : m)) }))
   },
 
   /** WebSocket events from other clients (and echoes of our own, deduped). */

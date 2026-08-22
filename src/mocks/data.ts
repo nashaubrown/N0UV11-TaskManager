@@ -1,4 +1,4 @@
-import type { Photo, Project, Task, User, CommentModel, ApprovalRequest, Merchant, Shoot } from '../types'
+import type { Photo, Project, Task, User, CommentModel, ApprovalRequest, Merchant, Shoot, Contact, Deal } from '../types'
 
 export const users: User[] = [
   { id: 'u1', email: 'nashaubrown@gmail.com', fullName: 'Nashau Brown', role: 'owner' },
@@ -6,6 +6,9 @@ export const users: User[] = [
   { id: 'u3', email: 'ibrahim@nouvii.app', fullName: 'Ibrahim Waheed', role: 'member' },
   { id: 'u4', email: 'mariyam@nouvii.app', fullName: 'Mariyam Saeed', role: 'member' },
 ]
+
+const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString()
+const hours = (n: number) => new Date(Date.now() + n * 3_600_000).toISOString()
 
 export const currentUser = users[0]
 
@@ -16,14 +19,27 @@ export const merchants: Merchant[] = [
   { id: 'm4', name: 'Seaside Spa & Wellness', location: 'Malé' },
 ]
 
+
+export const contacts: Contact[] = [
+  { id: 'ct1', fullName: 'Ahmed Naseem', email: 'ahmed@cafearoma.mv', company: 'Café Aroma' },
+  { id: 'ct2', fullName: 'Leela Manike', email: 'leela@islandresorts.mv', company: 'Island Resort Group' },
+  { id: 'ct3', fullName: 'Yoosuf Rasheed', phone: '+960 777 1234', company: 'Novelty Traders' },
+]
+
+export const deals: Deal[] = [
+  { id: 'd1', name: 'Café Aroma — launch package', stage: 'closed_won', valueCents: 250000, currency: 'USD', contact: contacts[0], owner: users[0], taskCount: 3, photoCount: 8 },
+  { id: 'd2', name: 'Island Resort — 3-property refresh', stage: 'negotiation', valueCents: 1200000, currency: 'USD', contact: contacts[1], owner: users[0], expectedClose: day(12), taskCount: 1, photoCount: 2 },
+  { id: 'd3', name: 'Novelty Traders — catalogue shoot', stage: 'proposal', valueCents: 480000, currency: 'USD', contact: contacts[2], owner: users[1], expectedClose: day(20), taskCount: 0, photoCount: 1 },
+  { id: 'd4', name: 'Seaside Spa — treatment menu', stage: 'qualified', valueCents: 180000, currency: 'USD', owner: users[0], taskCount: 0, photoCount: 1 },
+  { id: 'd5', name: 'Hulhumalé food court — walkthrough', stage: 'lead', currency: 'USD', owner: users[2], taskCount: 0, photoCount: 0 },
+]
+
 export const projects: Project[] = [
   { id: 'p1', name: 'Café Aroma Launch', description: 'Product + interior shoot for the new Hulhumalé branch', archived: false, createdAt: '2026-08-01T09:00:00Z', taskCount: 14, photoCount: 86, completedTaskCount: 9 },
   { id: 'p2', name: 'Island Resort Rebrand', description: 'Full photo library refresh across 3 properties', archived: false, createdAt: '2026-07-12T09:00:00Z', taskCount: 22, photoCount: 240, completedTaskCount: 6 },
   { id: 'p3', name: 'Q3 Merchant Onboarding', description: 'Storefront documentation for 12 new merchants', archived: false, createdAt: '2026-06-20T09:00:00Z', taskCount: 31, photoCount: 118, completedTaskCount: 25 },
 ]
 
-const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString()
-const hours = (n: number) => new Date(Date.now() + n * 3_600_000).toISOString()
 
 export const shoots: Shoot[] = [
   {

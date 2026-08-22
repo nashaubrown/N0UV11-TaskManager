@@ -225,3 +225,14 @@ export const APPROVAL_STATUS_META: Record<ApprovalStatus, { label: string; tone:
 }
 
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'error' | 'brand'
+
+export const DEAL_STAGE_META: Record<DealStage, { label: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'error' | 'brand' }> = {
+  lead: { label: 'Lead', tone: 'neutral' },
+  qualified: { label: 'Qualified', tone: 'info' },
+  proposal: { label: 'Proposal', tone: 'brand' },
+  negotiation: { label: 'Negotiation', tone: 'warning' },
+  closed_won: { label: 'Won', tone: 'success' },
+  closed_lost: { label: 'Lost', tone: 'neutral' },
+}
+
+export const DEAL_STAGES: DealStage[] = ['lead', 'qualified', 'proposal', 'negotiation', 'closed_won', 'closed_lost']

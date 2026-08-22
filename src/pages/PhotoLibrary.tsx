@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Camera, CloudOff, Download, ImagePlus, LayoutGrid, Rows3, Search, Store, Trash2, Upload, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
@@ -23,7 +24,8 @@ const FILTER_MATCH: Record<Exclude<Filter, 'all'>, ApprovalStatus[]> = {
 export default function PhotoLibrary() {
   const { photos, merchants, addPhotos, pendingUploads } = useData()
   const [filter, setFilter] = useState<Filter>('all')
-  const [merchantFilter, setMerchantFilter] = useState<MerchantFilter>('all')
+  const [searchParams] = useSearchParams()
+  const [merchantFilter, setMerchantFilter] = useState<MerchantFilter>(() => searchParams.get('merchantId') ?? 'all')
   const [grouped, setGrouped] = useState(false)
   const [query, setQuery] = useState('')
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
