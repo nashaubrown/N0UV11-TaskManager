@@ -3,9 +3,10 @@ import { MapPin, MessageSquare, Send } from 'lucide-react'
 import type { CommentModel } from '../../types'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
+import { AnnotatedPhoto } from './PhotoAnnotator'
 import { timeAgo } from '../../utils/format'
 
-function CommentRow({ comment, nested }: { comment: CommentModel; nested?: boolean }) {
+function CommentRow({ comment, nested, annotationBase }: { comment: CommentModel; nested?: boolean; annotationBase?: string }) {
   return (
     <div className={nested ? 'ml-9 mt-3' : ''}>
       <div className="flex gap-2.5">
@@ -29,17 +30,22 @@ function CommentRow({ comment, nested }: { comment: CommentModel; nested?: boole
             )}
           </div>
           <p className="text-sm text-ink-2 mt-0.5 break-words">{comment.body}</p>
+          {comment.annotation && annotationBase && (
+            <AnnotatedPhoto photoUrl={annotationBase} annotation={comment.annotation} className="mt-2 max-w-56" />
+          )}
         </div>
       </div>
-      {comment.replies?.map((r) => <CommentRow key={r.id} comment={r} nested />)}
+      {comment.replies?.map((r) => <CommentRow key={r.id} comment={r} nested annotationBase={annotationBase} />)}
     </div>
   )
 }
 
-export function CommentThread({ comments, onAdd, placeholder = 'Write a comment…' }: {
+export function CommentThread({ comments, onAdd, placeholder = 'Write a comment…', annotationBase }: {
   comments: CommentModel[]
   onAdd: (body: string) => void
   placeholder?: string
+  /** Photo URL that guest markup overlays render on top of. */
+  annotationBase?: string
 }) {
   const [draft, setDraft] = useState('')
 
@@ -59,7 +65,7 @@ export function CommentThread({ comments, onAdd, placeholder = 'Write a comment�
         </p>
       ) : (
         <div className="grid gap-4">
-          {comments.map((c) => <CommentRow key={c.id} comment={c} />)}
+          {comments.map((c) => <CommentRow key={c.id} comment={c} annotationBase={annotationBase} />)}
         </div>
       )}
       <form onSubmit={submit} className="flex gap-2">

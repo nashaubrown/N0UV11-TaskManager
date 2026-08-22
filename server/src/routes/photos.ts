@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma.js'
 import { notFound } from '../lib/errors.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
+import { requireCapability } from '../lib/permissions.js'
 import { validate } from '../middleware/validate.js'
 import { addTagDto, createCommentDto, registerPhotoDto, updatePhotoDto } from '../types/dto.js'
 import { sComment, sPhoto } from '../lib/serialize.js'
@@ -12,6 +13,7 @@ import { publicUrlFor } from '../services/storage.js'
 import { audit } from '../services/audit.js'
 import { broadcast } from '../ws/hub.js'
 import { aiConfigured, enqueueAiProcessing } from '../services/ai.js'
+import { enqueueDriveBackup } from '../services/driveBackup.js'
 import { badRequest } from '../lib/errors.js'
 
 export const photosRouter = Router()
@@ -66,7 +68,7 @@ photosRouter.get('/', async (req, res) => {
 })
 
 /** POST /photos — register an uploaded object as a photo. */
-photosRouter.post('/', requireRole('member'), validate(registerPhotoDto), async (req, res) => {
+photosRouter.post('/', requireCapability('photos.upload'), validate(registerPhotoDto), async (req, res) => {
   const b = req.body
   const photo = await prisma.photos.create({
     data: {
@@ -91,6 +93,7 @@ photosRouter.post('/', requireRole('member'), validate(registerPhotoDto), async 
   audit(req, 'photo.create', 'photo', photo.id, { key: b.s3Key })
   broadcast(req.auth!.organizationId, 'photo.created', out)
   enqueueAiProcessing(photo.id, req.auth!.organizationId)
+  enqueueDriveBackup(photo.id)
   res.status(201).json(out)
 })
 
@@ -100,7 +103,7 @@ photosRouter.get('/:id', async (req, res) => {
 })
 
 /** PATCH /photos/:id */
-photosRouter.patch('/:id', requireRole('member'), validate(updatePhotoDto), async (req, res) => {
+photosRouter.patch('/:id', requireCapability('photos.upload'), validate(updatePhotoDto), async (req, res) => {
   await loadPhoto(req.auth!.organizationId, param(req, 'id'))
   const photo = await prisma.photos.update({
     where: { id: param(req, 'id') },
@@ -119,7 +122,7 @@ photosRouter.patch('/:id', requireRole('member'), validate(updatePhotoDto), asyn
 })
 
 /** DELETE /photos/:id — soft delete. */
-photosRouter.delete('/:id', requireRole('member'), async (req, res) => {
+photosRouter.delete('/:id', requireCapability('photos.delete'), async (req, res) => {
   await loadPhoto(req.auth!.organizationId, param(req, 'id'))
   await prisma.photos.update({ where: { id: param(req, 'id') }, data: { deleted_at: new Date() } })
   audit(req, 'photo.delete', 'photo', param(req, 'id'))
@@ -128,7 +131,7 @@ photosRouter.delete('/:id', requireRole('member'), async (req, res) => {
 })
 
 /** POST /photos/:id/tags */
-photosRouter.post('/:id/tags', requireRole('member'), validate(addTagDto), async (req, res) => {
+photosRouter.post('/:id/tags', requireCapability('photos.upload'), validate(addTagDto), async (req, res) => {
   await loadPhoto(req.auth!.organizationId, param(req, 'id'))
   const tag = await prisma.photo_tags.upsert({
     where: { photo_id_tag_source: { photo_id: param(req, 'id'), tag: req.body.tag, source: 'user' } },
@@ -140,14 +143,14 @@ photosRouter.post('/:id/tags', requireRole('member'), validate(addTagDto), async
 })
 
 /** DELETE /photos/:id/tags/:tagId */
-photosRouter.delete('/:id/tags/:tagId', requireRole('member'), async (req, res) => {
+photosRouter.delete('/:id/tags/:tagId', requireCapability('photos.upload'), async (req, res) => {
   await loadPhoto(req.auth!.organizationId, param(req, 'id'))
   await prisma.photo_tags.deleteMany({ where: { id: param(req, 'tagId'), photo_id: param(req, 'id') } })
   res.status(204).end()
 })
 
 /** POST /photos/:id/ai — (re)queue Claude Vision analysis. */
-photosRouter.post('/:id/ai', requireRole('member'), async (req, res) => {
+photosRouter.post('/:id/ai', requireCapability('photos.upload'), async (req, res) => {
   if (!aiConfigured) throw badRequest('AI tagging is not configured on this server (set ANTHROPIC_API_KEY)')
   await loadPhoto(req.auth!.organizationId, param(req, 'id'))
   enqueueAiProcessing(param(req, 'id'), req.auth!.organizationId)
@@ -156,7 +159,7 @@ photosRouter.post('/:id/ai', requireRole('member'), async (req, res) => {
 })
 
 /** PATCH /photos/:id/tags/:tagId — accept or reject an AI suggestion. */
-photosRouter.patch('/:id/tags/:tagId', requireRole('member'), async (req, res) => {
+photosRouter.patch('/:id/tags/:tagId', requireCapability('photos.upload'), async (req, res) => {
   await loadPhoto(req.auth!.organizationId, param(req, 'id'))
   const status = req.body?.aiStatus
   if (status !== 'accepted' && status !== 'rejected') throw badRequest("aiStatus must be 'accepted' or 'rejected'")

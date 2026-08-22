@@ -22,6 +22,7 @@ import { shootsRouter } from './routes/shoots.js'
 import { pushRouter } from './routes/push.js'
 import { portalRouter, shareLinksRouter } from './routes/portal.js'
 import { feedRouter } from './routes/feed.js'
+import { analyticsRouter } from './routes/analytics.js'
 
 export function createApp() {
   const app = express()
@@ -57,6 +58,7 @@ export function createApp() {
   app.use('/api/push', pushRouter)
   app.use('/api/share-links', shareLinksRouter)
   app.use('/api/portal', portalRouter)
+  app.use('/api/analytics', analyticsRouter)
 
   // API docs at /api/docs
   try {

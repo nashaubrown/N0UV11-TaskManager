@@ -12,7 +12,8 @@ import {
   projects as seedProjects,
   tasks as seedTasks,
 } from '../mocks/data'
-import type { ApprovalRequest, CommentModel, Contact, Deal, DealStage, Member, Merchant, OrgRole, Photo, Project, Shoot, Task } from '../types'
+import type { ApprovalRequest, Capability, CommentModel, Contact, Deal, DealStage, Member, Merchant, OrgRole, Photo, Project, Shoot, Task } from '../types'
+import { ROLE_CAPABILITIES } from '../types'
 import { api, absoluteUrl, DEMO, putBytes } from '../services/api'
 import { enqueueUpload, flushQueue } from '../services/offlineQueue'
 
@@ -25,6 +26,18 @@ const threadCount = (cs: CommentModel[], pred: (c: CommentModel) => boolean) =>
   cs.filter(pred).reduce((n, c) => n + 1 + (c.replies?.length ?? 0), 0)
 
 const mapPhoto = (p: Photo): Photo => ({ ...p, url: absoluteUrl(p.url), thumbUrl: absoluteUrl(p.thumbUrl) })
+
+export interface CapabilityOverrides {
+  grant: Capability[]
+  revoke: Capability[]
+}
+
+/** Role baseline ± overrides, mirroring the server's effectiveCapabilities. */
+export const effectiveCapabilities = (role: OrgRole, overrides?: { capability: Capability; allowed: boolean }[]): Capability[] => {
+  const caps = new Set<Capability>(ROLE_CAPABILITIES[role])
+  if (role !== 'owner') for (const o of overrides ?? []) (o.allowed ? caps.add(o.capability) : caps.delete(o.capability))
+  return [...caps]
+}
 
 export interface NewShootInput {
   title: string
@@ -78,8 +91,9 @@ interface DataState {
   addContact: (input: { fullName: string; email?: string; phone?: string; company?: string }) => Promise<Contact>
   addMerchant: (input: { name: string; location?: string; igHandle?: string; bio?: string }) => Promise<void>
   updateMerchant: (id: string, patch: { name?: string; location?: string; igHandle?: string; bio?: string }) => Promise<void>
-  inviteMember: (input: { fullName: string; email: string; role: Exclude<OrgRole, 'owner'> }) => Promise<{ tempPassword?: string }>
+  inviteMember: (input: { fullName: string; email: string; role: Exclude<OrgRole, 'owner'>; overrides?: CapabilityOverrides }) => Promise<{ tempPassword?: string }>
   setMemberRole: (userId: string, role: Exclude<OrgRole, 'owner'>) => Promise<void>
+  setMemberAccess: (userId: string, patch: { role?: Exclude<OrgRole, 'owner'>; overrides?: CapabilityOverrides }) => Promise<void>
   removeMember: (userId: string) => Promise<void>
   loadComments: (target: { taskId?: string; photoId?: string }) => Promise<void>
   flushOfflineUploads: () => Promise<void>
@@ -423,8 +437,16 @@ export const useData = create<DataState>((set, get) => ({
   },
 
   inviteMember: async (input) => {
+    const toOverrideRows = (o?: CapabilityOverrides) => [
+      ...(o?.grant ?? []).map((capability) => ({ capability, allowed: true })),
+      ...(o?.revoke ?? []).map((capability) => ({ capability, allowed: false })),
+    ]
     if (DEMO) {
-      const member: Member = { id: `u${Date.now()}`, email: input.email, fullName: input.fullName, role: input.role }
+      const overrides = toOverrideRows(input.overrides)
+      const member: Member = {
+        id: `u${Date.now()}`, email: input.email, fullName: input.fullName, role: input.role,
+        overrides, capabilities: effectiveCapabilities(input.role, overrides),
+      }
       set((s) => ({ members: [...s.members, member] }))
       return { tempPassword: 'demo-only-password' }
     }
@@ -434,8 +456,32 @@ export const useData = create<DataState>((set, get) => ({
   },
 
   setMemberRole: async (userId, role) => {
-    if (!DEMO) await api('PATCH', `/org/members/${userId}`, { role })
-    set((s) => ({ members: s.members.map((m) => (m.id === userId ? { ...m, role } : m)) }))
+    await get().setMemberAccess(userId, { role })
+  },
+
+  setMemberAccess: async (userId, patch) => {
+    if (DEMO) {
+      set((s) => ({
+        members: s.members.map((m) => {
+          if (m.id !== userId) return m
+          const role = patch.role ?? (m.role as Exclude<OrgRole, 'owner'>)
+          const overrides = patch.overrides
+            ? [
+                ...patch.overrides.grant.map((capability) => ({ capability, allowed: true })),
+                ...patch.overrides.revoke.map((capability) => ({ capability, allowed: false })),
+              ]
+            : m.overrides
+          return { ...m, role, overrides, capabilities: effectiveCapabilities(role, overrides) }
+        }),
+      }))
+      return
+    }
+    const updated = await api<Pick<Member, 'role' | 'capabilities' | 'overrides'>>('PATCH', `/org/members/${userId}`, patch)
+    set((s) => ({
+      members: s.members.map((m) =>
+        m.id === userId ? { ...m, role: updated.role, capabilities: updated.capabilities, overrides: updated.overrides } : m,
+      ),
+    }))
   },
 
   removeMember: async (userId) => {

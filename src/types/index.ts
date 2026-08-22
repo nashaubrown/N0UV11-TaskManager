@@ -21,9 +21,46 @@ export interface User {
 
 export type OrgRole = 'owner' | 'admin' | 'manager' | 'member' | 'viewer'
 
+export const CAPABILITIES = [
+  'tasks.manage', 'photos.upload', 'photos.delete', 'approvals.decide',
+  'calendar.manage', 'deals.manage', 'merchants.manage', 'portal.share',
+  'team.manage', 'feed.manage', 'export.reports',
+] as const
+
+export type Capability = (typeof CAPABILITIES)[number]
+
+export const CAPABILITY_META: Record<Capability, string> = {
+  'tasks.manage': 'Manage tasks',
+  'photos.upload': 'Upload & tag photos',
+  'photos.delete': 'Delete photos',
+  'approvals.decide': 'Decide approvals',
+  'calendar.manage': 'Manage shoots & calendar',
+  'deals.manage': 'Manage deals & contacts',
+  'merchants.manage': 'Manage merchants',
+  'portal.share': 'Share client portals',
+  'team.manage': 'Manage the team',
+  'feed.manage': 'Plan Instagram feeds',
+  'export.reports': 'Export CSV & reports',
+}
+
+const MEMBER_BASE: Capability[] = [
+  'tasks.manage', 'photos.upload', 'photos.delete', 'approvals.decide',
+  'calendar.manage', 'deals.manage', 'feed.manage', 'portal.share', 'export.reports',
+]
+
+export const ROLE_CAPABILITIES: Record<OrgRole, readonly Capability[]> = {
+  viewer: [],
+  member: MEMBER_BASE,
+  manager: [...MEMBER_BASE, 'merchants.manage'],
+  admin: [...MEMBER_BASE, 'merchants.manage', 'team.manage'],
+  owner: [...CAPABILITIES],
+}
+
 export interface Member extends User {
   role: OrgRole
   joinedAt?: string
+  capabilities?: Capability[]
+  overrides?: { capability: Capability; allowed: boolean }[]
 }
 
 export const ROLE_META: Record<OrgRole, { label: string; description: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'error' | 'brand' }> = {
@@ -47,6 +84,7 @@ export interface FeedItem {
   photoId: string
   position: number
   caption?: string
+  scheduledAt?: string
   title?: string
   url: string
   thumbUrl: string
@@ -134,6 +172,7 @@ export interface Photo {
 }
 
 export interface CommentModel {
+  annotation?: string
   id: string
   photoId?: string
   taskId?: string

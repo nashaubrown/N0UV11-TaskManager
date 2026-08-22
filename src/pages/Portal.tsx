@@ -1,18 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Check, MessageSquare, Pencil, Send, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, MessageSquare, Pencil, PenLine, Send, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { apiOrigin, absoluteUrl, DEMO } from '../services/api'
 import { Badge } from '../components/common/Badge'
 import { Button } from '../components/common/Button'
 import { Input } from '../components/common/Input'
+import { PhotoAnnotator, AnnotatedPhoto, type PhotoAnnotatorHandle } from '../components/common/PhotoAnnotator'
 import { APPROVAL_STATUS_META, type ApprovalStatus } from '../types'
 import { photos as demoPhotos, projects as demoProjects } from '../mocks/data'
 
 /* Public client review portal — no login, reached via a signed share link.
  * Fetches its own data (never the authed store). */
 
-interface PortalComment { id: string; author: string; isGuest: boolean; body: string; replies?: PortalComment[] }
+interface PortalComment { id: string; author: string; isGuest: boolean; body: string; annotation?: string; replies?: PortalComment[] }
 interface PortalPhoto {
   id: string
   title?: string
@@ -64,6 +65,12 @@ export default function Portal({ token }: { token: string }) {
   const [draft, setDraft] = useState('')
   const [feedbackFor, setFeedbackFor] = useState<{ photoId: string; action: 'reject' | 'request_changes' } | null>(null)
   const [feedback, setFeedback] = useState('')
+  const [drawMode, setDrawMode] = useState(false)
+  const [hasStrokes, setHasStrokes] = useState(false)
+  const annotator = useRef<PhotoAnnotatorHandle>(null)
+
+  // leaving a photo drops any unsent markup
+  useEffect(() => { setDrawMode(false); setHasStrokes(false) }, [openId])
 
   useEffect(() => {
     if (DEMO) { setData(demoData()); return }
@@ -109,24 +116,30 @@ export default function Portal({ token }: { token: string }) {
   }
 
   const comment = async (photoId: string) => {
-    const body = draft.trim()
+    const annotation = annotator.current?.exportPng()
+    const body = draft.trim() || (annotation ? 'Marked up the photo' : '')
     if (!body) return
     if (!guestName.trim()) return setError('Add your name first so the team knows who commented.')
     setError(undefined)
-    if (DEMO) {
-      patchPhoto(photoId, { comments: [...(open?.comments ?? []), { id: `${Date.now()}`, author: `${guestName} (client)`, isGuest: true, body }] })
+    const done = () => {
       setDraft('')
-      return
+      annotator.current?.clear()
+      setDrawMode(false)
+      setHasStrokes(false)
+    }
+    if (DEMO) {
+      patchPhoto(photoId, { comments: [...(open?.comments ?? []), { id: `${Date.now()}`, author: `${guestName} (client)`, isGuest: true, body, annotation }] })
+      return done()
     }
     const res = await fetch(`${apiOrigin}/api/portal/${token}/photos/${photoId}/comments`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ guestName: guestName.trim(), body }),
+      body: JSON.stringify({ guestName: guestName.trim(), body, annotation }),
     })
     const saved = await res.json()
     if (!res.ok) return setError(saved?.error?.message ?? 'Could not post your comment')
-    patchPhoto(photoId, { comments: [...(data!.photos.find((p) => p.id === photoId)!.comments), { id: saved.id, author: saved.author, isGuest: true, body: saved.body }] })
-    setDraft('')
+    patchPhoto(photoId, { comments: [...(data!.photos.find((p) => p.id === photoId)!.comments), { id: saved.id, author: saved.author, isGuest: true, body: saved.body, annotation: saved.annotation }] })
+    done()
   }
 
   if (error && !data) {
@@ -250,10 +263,27 @@ export default function Portal({ token }: { token: string }) {
               role="dialog"
               aria-label={open.title ?? 'Photo review'}
             >
-              <img src={open.url} alt={open.title ?? 'Photo'} className="w-full max-h-[50dvh] object-contain bg-black/5" />
+              <PhotoAnnotator
+                ref={annotator}
+                src={open.url}
+                alt={open.title ?? 'Photo'}
+                drawing={drawMode}
+                onStrokesChange={setHasStrokes}
+                className="bg-black/5"
+              />
               <div className="p-4 grid gap-4">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="font-display font-semibold text-lg text-ink flex-1 min-w-40">{open.title ?? 'Untitled'}</h2>
+                  {data.canComment && (
+                    <Button
+                      size="sm"
+                      variant={drawMode ? 'primary' : 'secondary'}
+                      icon={<PenLine className="size-4" />}
+                      onClick={() => setDrawMode((d) => !d)}
+                    >
+                      {drawMode ? 'Drawing on' : 'Draw on photo'}
+                    </Button>
+                  )}
                   <Badge tone={APPROVAL_STATUS_META[open.approvalStatus].tone}>
                     {APPROVAL_STATUS_META[open.approvalStatus].label}
                   </Badge>
@@ -301,6 +331,7 @@ export default function Portal({ token }: { token: string }) {
                         <span className={clsx('font-medium', c.isGuest ? 'text-brand-deep dark:text-brand' : 'text-ink')}>{c.author}</span>
                         <span className="text-ink-2"> — {c.body}</span>
                       </p>
+                      {c.annotation && <AnnotatedPhoto photoUrl={open.url} annotation={c.annotation} alt={open.title} className="max-w-56" />}
                       {c.replies?.map((r) => (
                         <p key={r.id} className="text-sm ml-4">
                           <span className="font-medium text-ink">{r.author}</span>
@@ -317,12 +348,12 @@ export default function Portal({ token }: { token: string }) {
                       <input
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
-                        placeholder="Write a comment…"
+                        placeholder={hasStrokes ? 'Describe your markup (optional)…' : 'Write a comment…'}
                         aria-label="Add a comment"
                         className="flex-1 h-10 rounded-(--nv-radius-md) border border-border bg-surface text-ink placeholder:text-ink-faint
                                    px-3.5 text-sm transition-colors focus:border-brand focus:outline-none"
                       />
-                      <Button type="submit" size="md" disabled={!draft.trim()} icon={<Send className="size-4" />} aria-label="Send comment" />
+                      <Button type="submit" size="md" disabled={!draft.trim() && !hasStrokes} icon={<Send className="size-4" />} aria-label="Send comment" />
                     </form>
                   )}
                 </div>

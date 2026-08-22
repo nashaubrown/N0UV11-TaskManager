@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Bookmark, Grid3x3, Heart, MessageCircle, Plus, Send, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowLeft, Bookmark, ChartColumn, Grid3x3, Heart, MessageCircle, Plus, Send, Sparkles, Trash2 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { Button } from '../components/common/Button'
@@ -131,6 +131,12 @@ export default function MerchantProfile() {
           <h1 className="font-display font-bold text-2xl text-ink mt-1">{merchant.name} — feed preview</h1>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            to={`/analytics?merchant=${merchant.id}`}
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-(--nv-radius-md) border border-border text-sm font-medium text-ink-2 hover:bg-surface-2 transition-colors"
+          >
+            <ChartColumn className="size-4" aria-hidden /> Analytics
+          </Link>
           <div className="inline-flex rounded-full border border-border overflow-hidden text-sm font-medium">
             {(['1:1', '3:4'] as const).map((r) => (
               <button

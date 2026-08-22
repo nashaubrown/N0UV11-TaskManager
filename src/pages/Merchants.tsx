@@ -69,7 +69,12 @@ export default function Merchants() {
               </div>
               <div className="flex items-center gap-4 text-sm text-ink-muted">
                 <span className="inline-flex items-center gap-1.5"><ImageIcon className="size-4" aria-hidden /> {s.photos} photos</span>
-                <span className="inline-flex items-center gap-1.5"><CalendarDays className="size-4" aria-hidden /> {s.upcoming} upcoming shoots</span>
+                <Link
+                  to={`/calendar?merchantId=${m.id}`}
+                  className="inline-flex items-center gap-1.5 hover:text-ink hover:underline transition-colors"
+                >
+                  <CalendarDays className="size-4" aria-hidden /> {s.upcoming} upcoming shoots
+                </Link>
               </div>
               <div className="flex items-center gap-4">
                 <Link

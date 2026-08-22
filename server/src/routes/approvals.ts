@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { badRequest, notFound } from '../lib/errors.js'
-import { requireAuth, requireRole } from '../middleware/auth.js'
+import { requireAuth } from '../middleware/auth.js'
+import { requireCapability } from '../lib/permissions.js'
 import { validate } from '../middleware/validate.js'
 import { createApprovalRequestDto, decisionDto } from '../types/dto.js'
 import { sApproval, sUser } from '../lib/serialize.js'
@@ -56,7 +57,7 @@ approvalsRouter.get('/', async (req, res) => {
 
 /** POST /photos/:photoId/approvals — submit a photo for approval.
  *  Provide workflowId to reuse a template, or inline steps to create one. */
-approvalsRouter.post('/photos/:photoId', requireRole('member'), validate(createApprovalRequestDto), async (req, res) => {
+approvalsRouter.post('/photos/:photoId', requireCapability('photos.upload'), validate(createApprovalRequestDto), async (req, res) => {
   const photo = await prisma.photos.findFirst({
     where: { id: param(req, 'photoId'), organization_id: req.auth!.organizationId, deleted_at: null },
   })
@@ -101,7 +102,7 @@ approvalsRouter.get('/:id', async (req, res) => {
 })
 
 /** POST /approvals/:id/decisions — approve / reject / request_changes / comment. */
-approvalsRouter.post('/:id/decisions', requireRole('member'), validate(decisionDto), async (req, res) => {
+approvalsRouter.post('/:id/decisions', requireCapability('approvals.decide'), validate(decisionDto), async (req, res) => {
   const r = await prisma.approval_requests.findFirst({
     where: { id: param(req, 'id'), photos: { organization_id: req.auth!.organizationId } },
     include: { approval_workflows: { include: { approval_workflow_steps: true } } },

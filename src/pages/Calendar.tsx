@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { CalendarPlus, ChevronLeft, ChevronRight, MapPin, RefreshCw } from 'lucide-react'
 import {
   addDays, addMonths, endOfMonth, endOfWeek, format, isSameDay, isSameMonth,
@@ -69,7 +70,14 @@ function GoogleSyncChip() {
 }
 
 export default function Calendar() {
-  const { shoots } = useData()
+  const { shoots: allShoots, merchants } = useData()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const merchantFilter = searchParams.get('merchantId')
+  const filterMerchant = merchantFilter ? merchants.find((m) => m.id === merchantFilter) : undefined
+  const shoots = useMemo(
+    () => (merchantFilter ? allShoots.filter((s) => s.merchantId === merchantFilter) : allShoots),
+    [allShoots, merchantFilter],
+  )
   const [cursor, setCursor] = useState(() => new Date())
   const [creating, setCreating] = useState<Date | null>(null)
   const [openShootId, setOpenShootId] = useState<string | null>(null)
@@ -119,7 +127,21 @@ export default function Calendar() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="font-display font-bold text-2xl text-ink">Photoshoot Calendar</h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="font-display font-bold text-2xl text-ink">Photoshoot Calendar</h1>
+          {filterMerchant && (
+            <span className="inline-flex items-center gap-1.5 rounded-full nv-gradient text-on-brand text-sm font-medium pl-3 pr-1.5 py-1">
+              {filterMerchant.name}
+              <button
+                aria-label="Show all merchants"
+                onClick={() => setSearchParams({})}
+                className="size-5 rounded-full bg-white/20 hover:bg-white/35 transition-colors flex items-center justify-center text-xs"
+              >
+                ✕
+              </button>
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           <GoogleSyncChip />
           <Button icon={<CalendarPlus className="size-4" />} onClick={() => setCreating(new Date())}>New shoot</Button>

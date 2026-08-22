@@ -19,7 +19,10 @@ export interface Presigned {
 }
 
 const s3 = config.storage.driver === 's3'
-  ? new S3Client({ region: config.storage.s3.region })
+  ? new S3Client({
+      region: config.storage.s3.region,
+      ...(config.storage.s3.endpoint ? { endpoint: config.storage.s3.endpoint, forcePathStyle: true } : {}),
+    })
   : null
 
 const keyFor = (fileName: string) => {

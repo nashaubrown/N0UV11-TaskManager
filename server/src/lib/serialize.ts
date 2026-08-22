@@ -77,6 +77,7 @@ export const sComment = (c: any): any => ({
   author: c.users ? sUser(c.users) : undefined,
   guestName: c.guest_name ?? undefined,
   body: c.body,
+  annotation: c.annotation ?? undefined,
   pinX: c.pin_x ?? undefined,
   pinY: c.pin_y ?? undefined,
   resolvedAt: c.resolved_at ?? undefined,

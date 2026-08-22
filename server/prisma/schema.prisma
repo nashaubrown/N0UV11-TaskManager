@@ -93,6 +93,7 @@ model comments {
   resolved_at    DateTime?  @db.Timestamptz(6)
   created_at     DateTime   @default(now()) @db.Timestamptz(6)
   updated_at     DateTime   @default(now()) @db.Timestamptz(6)
+  annotation     String?
   users          users?     @relation(fields: [author_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   comments       comments?  @relation("commentsTocomments", fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   other_comments comments[] @relation("commentsTocomments")
@@ -201,6 +202,7 @@ model merchants {
   organizations   organizations     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   photos          photos[]
   photoshoots     photoshoots[]
+  social_accounts social_accounts[]
 
   @@unique([organization_id, name])
 }
@@ -229,25 +231,27 @@ model organization_members {
 }
 
 model organizations {
-  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                 String
-  slug                 String                 @unique
-  logo_url             String?
-  created_at           DateTime               @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
-  approval_workflows   approval_workflows[]
-  audit_log            audit_log[]
-  contacts             contacts[]
-  deals                deals[]
-  merchants            merchants[]
-  organization_members organization_members[]
-  photos               photos[]
-  photoshoots          photoshoots[]
-  projects             projects[]
-  share_links          share_links[]
-  task_labels          task_labels[]
-  tasks                tasks[]
-  teams                teams[]
+  id                          String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                        String
+  slug                        String                        @unique
+  logo_url                    String?
+  created_at                  DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime                      @default(now()) @db.Timestamptz(6)
+  approval_workflows          approval_workflows[]
+  audit_log                   audit_log[]
+  contacts                    contacts[]
+  deals                       deals[]
+  member_permission_overrides member_permission_overrides[]
+  merchants                   merchants[]
+  organization_members        organization_members[]
+  photos                      photos[]
+  photoshoots                 photoshoots[]
+  projects                    projects[]
+  share_links                 share_links[]
+  social_accounts             social_accounts[]
+  task_labels                 task_labels[]
+  tasks                       tasks[]
+  teams                       teams[]
 }
 
 model photo_ai_metadata {
@@ -315,6 +319,7 @@ model photos {
   created_at                               DateTime            @default(now()) @db.Timestamptz(6)
   updated_at                               DateTime            @default(now()) @db.Timestamptz(6)
   deleted_at                               DateTime?           @db.Timestamptz(6)
+  gdrive_file_id                           String?
   approval_requests                        approval_requests[]
   comments                                 comments[]
   deal_photos                              deal_photos[]
@@ -457,13 +462,13 @@ model teams {
 }
 
 model users {
-  id                                                          String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                                                       String                    @unique @db.Citext
+  id                                                          String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                                                       String                        @unique @db.Citext
   password_hash                                               String?
   full_name                                                   String
   avatar_url                                                  String?
-  created_at                                                  DateTime                  @default(now()) @db.Timestamptz(6)
-  updated_at                                                  DateTime                  @default(now()) @db.Timestamptz(6)
+  created_at                                                  DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at                                                  DateTime                      @default(now()) @db.Timestamptz(6)
   approval_decisions                                          approval_decisions[]
   approval_requests                                           approval_requests[]
   approval_workflow_steps                                     approval_workflow_steps[]
@@ -474,9 +479,10 @@ model users {
   feed_plan_items                                             feed_plan_items[]
   gcal_connections                                            gcal_connections?
   gcal_sync_queue                                             gcal_sync_queue[]
+  member_permission_overrides                                 member_permission_overrides[]
   notifications                                               notifications[]
-  organization_members_organization_members_invited_byTousers organization_members[]    @relation("organization_members_invited_byTousers")
-  organization_members_organization_members_user_idTousers    organization_members[]    @relation("organization_members_user_idTousers")
+  organization_members_organization_members_invited_byTousers organization_members[]        @relation("organization_members_invited_byTousers")
+  organization_members_organization_members_user_idTousers    organization_members[]        @relation("organization_members_user_idTousers")
   photo_tags                                                  photo_tags[]
   photo_versions                                              photo_versions[]
   photos                                                      photos[]
@@ -486,6 +492,7 @@ model users {
   refresh_tokens                                              refresh_tokens[]
   share_links                                                 share_links[]
   shoot_crew                                                  shoot_crew[]
+  social_accounts                                             social_accounts[]
   task_assignees                                              task_assignees[]
   tasks                                                       tasks[]
   team_members                                                team_members[]
@@ -545,18 +552,97 @@ model push_subscriptions {
 }
 
 model feed_plan_items {
-  merchant_id String    @db.Uuid
-  photo_id    String    @db.Uuid
-  position    Int       @default(0)
-  caption     String?
-  added_by    String?   @db.Uuid
-  created_at  DateTime  @default(now()) @db.Timestamptz(6)
-  users       users?    @relation(fields: [added_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  merchants   merchants @relation(fields: [merchant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  photos      photos    @relation(fields: [photo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  merchant_id  String    @db.Uuid
+  photo_id     String    @db.Uuid
+  position     Int       @default(0)
+  caption      String?
+  added_by     String?   @db.Uuid
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  scheduled_at DateTime? @db.Timestamptz(6)
+  users        users?    @relation(fields: [added_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  merchants    merchants @relation(fields: [merchant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  photos       photos    @relation(fields: [photo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@id([merchant_id, photo_id])
   @@index([merchant_id, position], map: "idx_feed_plan_order")
+}
+
+model member_permission_overrides {
+  organization_id String        @db.Uuid
+  user_id         String        @db.Uuid
+  capability      String
+  allowed         Boolean
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users           users         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([organization_id, user_id, capability])
+}
+
+model social_accounts {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id      String                 @db.Uuid
+  merchant_id          String                 @db.Uuid
+  platform             String                 @default("instagram")
+  ig_user_id           String
+  username             String?
+  access_token         String
+  token_expires_at     DateTime?              @db.Timestamptz(6)
+  connected_by         String?                @db.Uuid
+  connected_at         DateTime               @default(now()) @db.Timestamptz(6)
+  last_synced_at       DateTime?              @db.Timestamptz(6)
+  users                users?                 @relation(fields: [connected_by], references: [id], onUpdate: NoAction)
+  merchants            merchants              @relation(fields: [merchant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organizations        organizations          @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  social_metrics_daily social_metrics_daily[]
+  social_online_times  social_online_times[]
+  social_posts         social_posts[]
+
+  @@unique([merchant_id, platform])
+  @@index([organization_id], map: "idx_social_accounts_org")
+}
+
+model social_metrics_daily {
+  account_id      String          @db.Uuid
+  day             DateTime        @db.Date
+  followers       Int?
+  media_count     Int?
+  reach           Int?
+  impressions     Int?
+  profile_views   Int?
+  website_clicks  Int?
+  social_accounts social_accounts @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([account_id, day])
+}
+
+model social_online_times {
+  account_id      String          @db.Uuid
+  dow             Int             @db.SmallInt
+  hour            Int             @db.SmallInt
+  value           Float           @default(0)
+  social_accounts social_accounts @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([account_id, dow, hour])
+}
+
+model social_posts {
+  account_id      String          @db.Uuid
+  ig_media_id     String
+  caption         String?
+  media_type      String?
+  thumbnail_url   String?
+  permalink       String?
+  posted_at       DateTime?       @db.Timestamptz(6)
+  like_count      Int?
+  comments_count  Int?
+  reach           Int?
+  saved           Int?
+  last_synced_at  DateTime        @default(now()) @db.Timestamptz(6)
+  social_accounts social_accounts @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([account_id, ig_media_id])
+  @@index([account_id, posted_at(sort: Desc)], map: "idx_social_posts_time")
 }
 
 enum ai_tag_status {

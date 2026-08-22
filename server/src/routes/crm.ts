@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { notFound } from '../lib/errors.js'
-import { requireAuth, requireRole } from '../middleware/auth.js'
+import { requireAuth } from '../middleware/auth.js'
+import { requireCapability } from '../lib/permissions.js'
 import { validate } from '../middleware/validate.js'
 import { createContactDto, createDealDto, updateDealDto } from '../types/dto.js'
 import { sContact, sDeal } from '../lib/serialize.js'
@@ -31,7 +32,7 @@ contactsRouter.get('/', async (req, res) => {
 })
 
 /** POST /contacts */
-contactsRouter.post('/', requireRole('member'), validate(createContactDto), async (req, res) => {
+contactsRouter.post('/', requireCapability('deals.manage'), validate(createContactDto), async (req, res) => {
   const contact = await prisma.contacts.create({
     data: {
       organization_id: req.auth!.organizationId,
@@ -70,7 +71,7 @@ dealsRouter.get('/', async (req, res) => {
 })
 
 /** POST /deals */
-dealsRouter.post('/', requireRole('member'), validate(createDealDto), async (req, res) => {
+dealsRouter.post('/', requireCapability('deals.manage'), validate(createDealDto), async (req, res) => {
   const b = req.body
   const deal = await prisma.deals.create({
     data: {
@@ -90,7 +91,7 @@ dealsRouter.post('/', requireRole('member'), validate(createDealDto), async (req
 })
 
 /** PATCH /deals/:id */
-dealsRouter.patch('/:id', requireRole('member'), validate(updateDealDto), async (req, res) => {
+dealsRouter.patch('/:id', requireCapability('deals.manage'), validate(updateDealDto), async (req, res) => {
   const existing = await prisma.deals.findFirst({
     where: { id: param(req, 'id'), organization_id: req.auth!.organizationId },
   })
@@ -113,7 +114,7 @@ dealsRouter.patch('/:id', requireRole('member'), validate(updateDealDto), async 
 })
 
 /** POST /deals/:id/photos/:photoId + tasks link/unlink */
-dealsRouter.post('/:id/photos/:photoId', requireRole('member'), async (req, res) => {
+dealsRouter.post('/:id/photos/:photoId', requireCapability('deals.manage'), async (req, res) => {
   await prisma.deal_photos.upsert({
     where: { deal_id_photo_id: { deal_id: param(req, 'id'), photo_id: param(req, 'photoId') } },
     create: { deal_id: param(req, 'id'), photo_id: param(req, 'photoId') },
@@ -122,7 +123,7 @@ dealsRouter.post('/:id/photos/:photoId', requireRole('member'), async (req, res)
   res.status(201).json({ ok: true })
 })
 
-dealsRouter.post('/:id/tasks/:taskId', requireRole('member'), async (req, res) => {
+dealsRouter.post('/:id/tasks/:taskId', requireCapability('deals.manage'), async (req, res) => {
   await prisma.deal_tasks.upsert({
     where: { deal_id_task_id: { deal_id: param(req, 'id'), task_id: param(req, 'taskId') } },
     create: { deal_id: param(req, 'id'), task_id: param(req, 'taskId') },
