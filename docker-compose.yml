@@ -1,0 +1,14 @@
+# Dev database only — run: docker compose up -d
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: nouvii
+      POSTGRES_PASSWORD: nouvii_dev
+      POSTGRES_DB: nouvii
+    ports:
+      - "5432:5432"
+    volumes:
+      - nouvii_pg:/var/lib/postgresql/data
+volumes:
+  nouvii_pg:

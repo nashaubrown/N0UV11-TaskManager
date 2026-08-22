@@ -37,6 +37,13 @@ npm run db:seed                  # demo org — login nashaubrown@gmail.com / no
 npm run dev                      # API on http://localhost:4000
 ```
 
+> **Windows PowerShell note:** `&&` doesn't work in Windows PowerShell 5.1 —
+> run each command on its own line (or use PowerShell 7+). Easiest database
+> setup on Windows is Docker Desktop: `docker compose up -d` starts Postgres
+> with the credentials already in `server/.env.example`. Without Docker,
+> install PostgreSQL 16 (`winget install PostgreSQL.PostgreSQL.16`) and use
+> pgAdmin or psql to create a `nouvii` database, then set DATABASE_URL.
+
 - Swagger docs: http://localhost:4000/api/docs
 - WebSocket events: `ws://localhost:4000/ws?token=<accessToken>`
 - Smoke tests: `node server/smoke.test.mjs` (39 checks; server must be running)
