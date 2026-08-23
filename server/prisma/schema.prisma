@@ -492,6 +492,7 @@ model users {
   refresh_tokens                                              refresh_tokens[]
   share_links                                                 share_links[]
   shoot_crew                                                  shoot_crew[]
+  shoot_gcal_events                                           shoot_gcal_events[]
   social_accounts                                             social_accounts[]
   task_assignees                                              task_assignees[]
   tasks                                                       tasks[]
@@ -500,27 +501,27 @@ model users {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model photoshoots {
-  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id String            @db.Uuid
-  project_id      String?           @db.Uuid
-  merchant_id     String?           @db.Uuid
-  title           String
-  description     String?
-  location        String?
-  starts_at       DateTime          @db.Timestamptz(6)
-  ends_at         DateTime          @db.Timestamptz(6)
-  status          shoot_status      @default(planning)
-  created_by      String?           @db.Uuid
-  gcal_event_id   String?
-  gcal_synced_at  DateTime?         @db.Timestamptz(6)
-  created_at      DateTime          @default(now()) @db.Timestamptz(6)
-  updated_at      DateTime          @default(now()) @db.Timestamptz(6)
-  gcal_sync_queue gcal_sync_queue[]
-  users           users?            @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  merchants       merchants?        @relation(fields: [merchant_id], references: [id], onUpdate: NoAction)
-  organizations   organizations     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  projects        projects?         @relation(fields: [project_id], references: [id], onUpdate: NoAction)
-  shoot_crew      shoot_crew[]
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id   String              @db.Uuid
+  project_id        String?             @db.Uuid
+  merchant_id       String?             @db.Uuid
+  title             String
+  description       String?
+  location          String?
+  starts_at         DateTime            @db.Timestamptz(6)
+  ends_at           DateTime            @db.Timestamptz(6)
+  status            shoot_status        @default(planning)
+  created_by        String?             @db.Uuid
+  gcal_synced_at    DateTime?           @db.Timestamptz(6)
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime            @default(now()) @db.Timestamptz(6)
+  gcal_sync_queue   gcal_sync_queue[]
+  users             users?              @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  merchants         merchants?          @relation(fields: [merchant_id], references: [id], onUpdate: NoAction)
+  organizations     organizations       @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  projects          projects?           @relation(fields: [project_id], references: [id], onUpdate: NoAction)
+  shoot_crew        shoot_crew[]
+  shoot_gcal_events shoot_gcal_events[]
 
   @@index([organization_id, starts_at], map: "idx_shoots_org_time")
   @@index([organization_id, status], map: "idx_shoots_status")
@@ -652,6 +653,17 @@ model social_posts {
 
   @@id([account_id, ig_media_id])
   @@index([account_id, posted_at(sort: Desc)], map: "idx_social_posts_time")
+}
+
+model shoot_gcal_events {
+  shoot_id    String      @db.Uuid
+  user_id     String      @db.Uuid
+  event_id    String
+  synced_at   DateTime    @default(now()) @db.Timestamptz(6)
+  photoshoots photoshoots @relation(fields: [shoot_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users       users       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([shoot_id, user_id])
 }
 
 enum ai_tag_status {

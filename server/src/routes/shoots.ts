@@ -11,7 +11,7 @@ import { pageParams, paged } from '../lib/pagination.js'
 import { param } from '../lib/params.js'
 import { audit } from '../services/audit.js'
 import { broadcast } from '../ws/hub.js'
-import { deleteShootEvent, enqueueShootSync } from '../services/gcal.js'
+import { deleteShootEvents, syncShootToCalendars } from '../services/gcal.js'
 
 export const shootsRouter = Router()
 shootsRouter.use(requireAuth)
@@ -69,7 +69,7 @@ shootsRouter.post('/', requireCapability('calendar.manage'), validate(createShoo
   const out = sShoot(shoot)
   audit(req, 'shoot.create', 'photoshoot', shoot.id, { title: shoot.title, status: shoot.status })
   broadcast(req.auth!.organizationId, 'shoot.created', out)
-  enqueueShootSync(shoot.id, req.auth!.userId)
+  void syncShootToCalendars(shoot.id, req.auth!.userId)
   res.status(201).json(out)
 })
 
@@ -106,14 +106,14 @@ shootsRouter.patch('/:id', requireCapability('calendar.manage'), validate(update
     audit(req, 'shoot.update', 'photoshoot', shoot.id, b)
   }
   broadcast(req.auth!.organizationId, 'shoot.updated', out)
-  enqueueShootSync(shoot.id, req.auth!.userId)
+  void syncShootToCalendars(shoot.id, req.auth!.userId)
   res.json(out)
 })
 
 /** DELETE /shoots/:id */
 shootsRouter.delete('/:id', requireCapability('calendar.manage'), async (req, res) => {
   await loadShoot(req.auth!.organizationId, param(req, 'id'))
-  deleteShootEvent(param(req, 'id'), req.auth!.userId)
+  await deleteShootEvents(param(req, 'id'))
   await prisma.photoshoots.delete({ where: { id: param(req, 'id') } })
   audit(req, 'shoot.delete', 'photoshoot', param(req, 'id'))
   broadcast(req.auth!.organizationId, 'shoot.deleted', { id: param(req, 'id') })

@@ -348,7 +348,6 @@ CREATE TABLE photoshoots (
   ends_at         TIMESTAMPTZ NOT NULL,
   status          shoot_status NOT NULL DEFAULT 'planning',
   created_by      UUID REFERENCES users(id),
-  gcal_event_id   TEXT,
   gcal_synced_at  TIMESTAMPTZ,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -360,6 +359,16 @@ CREATE INDEX idx_shoots_status   ON photoshoots (organization_id, status);
 CREATE TABLE shoot_crew (
   shoot_id UUID NOT NULL REFERENCES photoshoots(id) ON DELETE CASCADE,
   user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (shoot_id, user_id)
+);
+
+-- one Google event per (shoot, crew member) — each connected member gets
+-- the shoot in their own calendar
+CREATE TABLE shoot_gcal_events (
+  shoot_id  UUID NOT NULL REFERENCES photoshoots(id) ON DELETE CASCADE,
+  user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event_id  TEXT NOT NULL,
+  synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (shoot_id, user_id)
 );
 

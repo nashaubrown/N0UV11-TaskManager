@@ -48,6 +48,7 @@ export interface NewShootInput {
   status: Shoot['status']
   projectId?: string
   merchantId?: string
+  crewIds?: string[]
 }
 
 export interface NewTaskInput {
@@ -336,10 +337,12 @@ export const useData = create<DataState>((set, get) => ({
 
   addShoot: async (input) => {
     if (DEMO) {
+      const { crewIds, ...rest } = input
+      const crew = get().members.filter((m) => crewIds?.includes(m.id))
       const shoot: Shoot = {
         id: `sh${Date.now()}`,
-        ...input,
-        crew: [currentUser],
+        ...rest,
+        crew: crew.length ? crew : [currentUser],
         createdAt: new Date().toISOString(),
       }
       set((s) => ({ shoots: [...s.shoots, shoot] }))
@@ -352,7 +355,9 @@ export const useData = create<DataState>((set, get) => ({
 
   updateShoot: async (id, patch) => {
     if (DEMO) {
-      set((s) => ({ shoots: s.shoots.map((x) => (x.id === id ? { ...x, ...patch } : x)) }))
+      const { crewIds, ...rest } = patch
+      const crew = crewIds ? get().members.filter((m) => crewIds.includes(m.id)) : undefined
+      set((s) => ({ shoots: s.shoots.map((x) => (x.id === id ? { ...x, ...rest, ...(crew ? { crew } : {}) } : x)) }))
       return
     }
     const shoot = await api<Shoot>('PATCH', `/shoots/${id}`, patch)
