@@ -9,6 +9,7 @@ import { connectRealtime, disconnectRealtime } from './services/ws'
 import { DEMO } from './services/api'
 import Login from './pages/Login'
 import Portal from './pages/Portal'
+import { Privacy, DataDeletion } from './pages/Legal'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Projects = lazy(() => import('./pages/Projects'))
@@ -77,6 +78,10 @@ function Gate() {
   }, [user, hydrate])
 
   if (portalMatch) return <Portal token={decodeURIComponent(portalMatch[1])} />
+  // legal pages are public — linked from the Meta app settings
+  const path = window.location.pathname + window.location.hash
+  if (/\/privacy\/?$/.test(path)) return <Privacy />
+  if (/\/data-deletion\/?$/.test(path)) return <DataDeletion />
   if (!DEMO && !ready) return <PageFallback />
   if (!DEMO && !user) return <Login />
   return <AppRoutes />

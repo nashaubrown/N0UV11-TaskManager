@@ -1,4 +1,7 @@
 import { useState, type FormEvent } from 'react'
+import clsx from 'clsx'
+import { Check } from 'lucide-react'
+import { Avatar } from '../common/Avatar'
 import { Button } from '../common/Button'
 import { Input, Select, Textarea } from '../common/Input'
 import { useData, type NewShootInput } from '../../store/data'
@@ -16,7 +19,7 @@ export function ShootForm({ initial, defaultDate, onSubmit, onCancel }: {
   onSubmit: (values: NewShootInput) => void
   onCancel: () => void
 }) {
-  const { merchants, projects } = useData()
+  const { merchants, projects, members } = useData()
   const base = defaultDate ?? new Date()
   const defaultStart = new Date(base); defaultStart.setHours(9, 0, 0, 0)
   const defaultEnd = new Date(base); defaultEnd.setHours(12, 0, 0, 0)
@@ -29,7 +32,11 @@ export function ShootForm({ initial, defaultDate, onSubmit, onCancel }: {
   const [startsAt, setStartsAt] = useState(toLocalInput(initial?.startsAt ?? defaultStart.toISOString()))
   const [endsAt, setEndsAt] = useState(toLocalInput(initial?.endsAt ?? defaultEnd.toISOString()))
   const [status, setStatus] = useState<Shoot['status']>(initial?.status ?? 'planning')
+  const [crewIds, setCrewIds] = useState<string[]>(initial?.crew.map((u) => u.id) ?? [])
   const [error, setError] = useState<string>()
+
+  const toggleCrew = (id: string) =>
+    setCrewIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -44,6 +51,7 @@ export function ShootForm({ initial, defaultDate, onSubmit, onCancel }: {
       startsAt: new Date(startsAt).toISOString(),
       endsAt: new Date(endsAt).toISOString(),
       status,
+      crewIds,
     })
   }
 
@@ -70,6 +78,35 @@ export function ShootForm({ initial, defaultDate, onSubmit, onCancel }: {
           <option value="confirmed">Confirmed</option>
         </Select>
       </div>
+      <fieldset>
+        <legend className="text-sm font-medium text-ink mb-1.5">Crew</legend>
+        <div className="flex flex-wrap gap-1.5">
+          {members.map((m) => {
+            const on = crewIds.includes(m.id)
+            return (
+              <button
+                key={m.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggleCrew(m.id)}
+                className={clsx(
+                  'inline-flex items-center gap-1.5 rounded-full border pl-1 pr-2.5 py-1 text-sm transition-colors',
+                  on
+                    ? 'border-brand/50 bg-coral/10 text-ink font-medium'
+                    : 'border-border text-ink-muted hover:bg-surface-2',
+                )}
+              >
+                <Avatar user={m} size="xs" />
+                {m.fullName.split(' ')[0]}
+                {on && <Check className="size-3.5 text-brand-deep dark:text-brand" aria-hidden />}
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-xs text-ink-muted mt-1.5">
+          Tagged crew get the shoot in their Google Calendar automatically once it's confirmed (and they've connected Google).
+        </p>
+      </fieldset>
       <Textarea label="Notes" placeholder="Shot list, gear, access notes…" value={description} onChange={(e) => setDescription(e.target.value)} />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>

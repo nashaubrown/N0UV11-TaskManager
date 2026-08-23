@@ -83,51 +83,81 @@ export function deleteCalendarEvent(taskId: string, userId: string) {
     .catch((e) => console.error('gcal event delete failed', e))
 }
 
-/** Enqueue a sync op for a shoot write. No-op when the actor has no connection. */
-export function enqueueShootSync(shootId: string, userId: string) {
+/** Enqueue sync ops for everyone a shoot concerns: the tagged crew (or the
+ *  creator when no crew is set), plus anyone who currently holds an event
+ *  and needs it removed (crew removal, status revert). Only users with a
+ *  connected Google account are queued. */
+export async function syncShootToCalendars(shootId: string, actorId: string): Promise<void> {
   if (!config.google.configured) return
-  prisma.gcal_connections
-    .findUnique({ where: { user_id: userId } })
-    .then((conn) => conn && prisma.gcal_sync_queue.create({ data: { shoot_id: shootId, user_id: userId, operation: 'update' } }))
-    .catch((e) => console.error('gcal enqueue failed', e))
-}
-
-/** Remove a shoot's Google event before the row is deleted. */
-export function deleteShootEvent(shootId: string, userId: string) {
-  if (!config.google.configured) return
-  prisma.photoshoots
-    .findUnique({ where: { id: shootId } })
-    .then(async (shoot) => {
-      if (!shoot?.gcal_event_id) return
-      const creds = await freshAccessToken(userId)
-      if (!creds) return
-      await fetch(
-        `${GCAL_API}/calendars/${encodeURIComponent(creds.calendarId)}/events/${shoot.gcal_event_id}`,
-        { method: 'DELETE', headers: { authorization: `Bearer ${creds.token}` } },
-      )
+  try {
+    const shoot = await prisma.photoshoots.findUnique({
+      where: { id: shootId },
+      include: { shoot_crew: true },
     })
-    .catch((e) => console.error('gcal shoot event delete failed', e))
+    if (!shoot) return
+    const recipients = new Set<string>(shoot.shoot_crew.map((c) => c.user_id))
+    if (recipients.size === 0 && shoot.created_by) recipients.add(shoot.created_by)
+    if (recipients.size === 0) recipients.add(actorId)
+    // users holding a stale event (removed from crew) need a cleanup pass
+    const holders = await prisma.shoot_gcal_events.findMany({ where: { shoot_id: shootId } })
+    for (const h of holders) recipients.add(h.user_id)
+    const connected = await prisma.gcal_connections.findMany({ where: { user_id: { in: [...recipients] } } })
+    for (const conn of connected) {
+      await prisma.gcal_sync_queue.create({ data: { shoot_id: shootId, user_id: conn.user_id, operation: 'update' } })
+    }
+  } catch (e) {
+    console.error('gcal shoot enqueue failed', e)
+  }
 }
 
-/** Push one shoot to Google. Policy: Confirmed and Completed shoots have an
- *  event; Planning and Cancelled do not (reverting/cancelling removes it). */
+/** Remove every crew member's Google event for a shoot. Awaited before the
+ *  shoot row is deleted (event rows cascade away with it). */
+export async function deleteShootEvents(shootId: string): Promise<void> {
+  if (!config.google.configured) return
+  try {
+    const rows = await prisma.shoot_gcal_events.findMany({ where: { shoot_id: shootId } })
+    for (const row of rows) {
+      const creds = await freshAccessToken(row.user_id).catch(() => null)
+      if (!creds) continue
+      await fetch(
+        `${GCAL_API}/calendars/${encodeURIComponent(creds.calendarId)}/events/${row.event_id}`,
+        { method: 'DELETE', headers: { authorization: `Bearer ${creds.token}` } },
+      ).catch(() => {})
+    }
+  } catch (e) {
+    console.error('gcal shoot event delete failed', e)
+  }
+}
+
+/** Push one (shoot, user) pair to Google. Policy: Confirmed and Completed
+ *  shoots put an event in each crew member's calendar (creator's when no
+ *  crew is tagged); Planning/Cancelled — or being dropped from the crew —
+ *  removes it. */
 async function pushShoot(op: { shoot_id: string | null; user_id: string }) {
   if (!op.shoot_id) return
   const creds = await freshAccessToken(op.user_id)
   if (!creds) return
   const shoot = await prisma.photoshoots.findUnique({
     where: { id: op.shoot_id },
-    include: { merchants: true },
+    include: { merchants: true, shoot_crew: true },
   })
   if (!shoot) return
   const headers = { authorization: `Bearer ${creds.token}`, 'content-type': 'application/json' }
   const base = `${GCAL_API}/calendars/${encodeURIComponent(creds.calendarId)}/events`
+  const eventRow = await prisma.shoot_gcal_events.findUnique({
+    where: { shoot_id_user_id: { shoot_id: shoot.id, user_id: op.user_id } },
+  })
 
-  const wantsEvent = shoot.status === 'confirmed' || shoot.status === 'completed'
+  const crewIds = shoot.shoot_crew.map((c) => c.user_id)
+  const isRecipient = crewIds.includes(op.user_id) || (crewIds.length === 0 && shoot.created_by === op.user_id)
+  const wantsEvent = isRecipient && (shoot.status === 'confirmed' || shoot.status === 'completed')
+
   if (!wantsEvent) {
-    if (shoot.gcal_event_id) {
-      await fetch(`${base}/${shoot.gcal_event_id}`, { method: 'DELETE', headers })
-      await prisma.photoshoots.update({ where: { id: shoot.id }, data: { gcal_event_id: null } })
+    if (eventRow) {
+      await fetch(`${base}/${eventRow.event_id}`, { method: 'DELETE', headers }).catch(() => {})
+      await prisma.shoot_gcal_events.delete({
+        where: { shoot_id_user_id: { shoot_id: shoot.id, user_id: op.user_id } },
+      })
     }
     return
   }
@@ -140,14 +170,23 @@ async function pushShoot(op: { shoot_id: string | null; user_id: string }) {
     end: { dateTime: shoot.ends_at.toISOString() },
     status: 'confirmed',
   }
-  const res = shoot.gcal_event_id
-    ? await fetch(`${base}/${shoot.gcal_event_id}`, { method: 'PATCH', headers, body: JSON.stringify(event) })
+  let res = eventRow
+    ? await fetch(`${base}/${eventRow.event_id}`, { method: 'PATCH', headers, body: JSON.stringify(event) })
     : await fetch(base, { method: 'POST', headers, body: JSON.stringify(event) })
+  if (eventRow && res.status === 404) {
+    // the user deleted the event by hand — recreate it
+    res = await fetch(base, { method: 'POST', headers, body: JSON.stringify(event) })
+  }
   if (!res.ok) throw new Error(`Google Calendar shoot write failed: ${res.status} ${await res.text()}`)
   const saved = (await res.json()) as { id: string }
+  await prisma.shoot_gcal_events.upsert({
+    where: { shoot_id_user_id: { shoot_id: shoot.id, user_id: op.user_id } },
+    create: { shoot_id: shoot.id, user_id: op.user_id, event_id: saved.id },
+    update: { event_id: saved.id, synced_at: new Date() },
+  })
   await prisma.photoshoots.update({
     where: { id: shoot.id },
-    data: { gcal_event_id: saved.id, gcal_synced_at: new Date() },
+    data: { gcal_synced_at: new Date() },
   })
 }
 
