@@ -27,8 +27,14 @@ export interface AnalyticsPost {
   saved?: number
 }
 
+export interface AnalyticsProviders {
+  facebook: boolean
+  instagram: boolean
+}
+
 export interface AnalyticsData {
   configured: boolean
+  providers?: AnalyticsProviders
   account: { username?: string; connectedAt?: string; lastSyncedAt?: string } | null
   series: AnalyticsSeriesPoint[]
   posts: AnalyticsPost[]
@@ -39,7 +45,9 @@ export interface AnalyticsData {
 
 export interface AnalyticsStatus {
   configured: boolean
+  providers?: AnalyticsProviders
   redirectUrl?: string
+  igRedirectUrl?: string
   accounts: { merchantId: string; username?: string; connectedAt: string; lastSyncedAt?: string }[]
 }
 
@@ -129,8 +137,8 @@ export const fetchAnalyticsStatus = () =>
 export const fetchAnalytics = (merchantId: string, days: number) =>
   api<AnalyticsData>('GET', `/analytics/${merchantId}?days=${days}`)
 
-export const startConnect = (merchantId: string) =>
-  api<{ url: string }>('POST', `/analytics/${merchantId}/connect`)
+export const startConnect = (merchantId: string, provider: 'instagram' | 'facebook') =>
+  api<{ url: string }>('POST', `/analytics/${merchantId}/connect`, { provider })
 
 export const syncNow = (merchantId: string) => api('POST', `/analytics/${merchantId}/sync`)
 

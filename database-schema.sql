@@ -494,6 +494,7 @@ CREATE TABLE social_accounts (
   followers        INTEGER,
   following        INTEGER,
   media_count      INTEGER,
+  auth_kind        TEXT NOT NULL DEFAULT 'facebook',  -- 'facebook' (Page-linked) | 'instagram' (IG login)
   UNIQUE (merchant_id, platform)
 );
 CREATE INDEX idx_social_accounts_org ON social_accounts (organization_id);

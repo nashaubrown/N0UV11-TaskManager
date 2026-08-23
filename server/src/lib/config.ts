@@ -39,6 +39,13 @@ export const config = {
     appSecret: process.env.META_APP_SECRET ?? '',
     redirectUrl: process.env.META_REDIRECT_URL ?? 'http://localhost:4000/api/analytics/oauth/callback',
     get configured() { return Boolean(this.appId && this.appSecret) },
+    // "Instagram API with Instagram Login" — merchants sign in with just
+    // their IG account, no Facebook Page. Separate credentials from the
+    // app's Instagram product tab.
+    igAppId: process.env.IG_APP_ID ?? '',
+    igAppSecret: process.env.IG_APP_SECRET ?? '',
+    igRedirectUrl: process.env.IG_REDIRECT_URL ?? 'http://localhost:4000/api/analytics/oauth/instagram/callback',
+    get igConfigured() { return Boolean(this.igAppId && this.igAppSecret) },
   },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',
