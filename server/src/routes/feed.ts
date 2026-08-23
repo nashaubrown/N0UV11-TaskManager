@@ -58,6 +58,8 @@ async function liveAccountFor(merchantId: string) {
     followers: account.followers ?? undefined,
     following: account.following ?? undefined,
     mediaCount: account.media_count ?? posts.length,
+    avatarUrl: account.profile_picture_url ?? undefined,
+    bio: account.biography ?? undefined,
     lastSyncedAt: account.last_synced_at ?? undefined,
     posts: posts
       .filter((p) => p.thumbnail_url)

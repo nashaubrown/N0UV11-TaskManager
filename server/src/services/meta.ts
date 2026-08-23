@@ -173,9 +173,9 @@ export async function syncAccount(accountId: string): Promise<void> {
   const token = viaIgLogin ? await freshIgToken(account) : account.access_token
   const ig = account.ig_user_id
 
-  const profile = await graph<{ followers_count?: number; follows_count?: number; media_count?: number; username?: string }>(
+  const profile = await graph<{ followers_count?: number; follows_count?: number; media_count?: number; username?: string; profile_picture_url?: string; biography?: string }>(
     viaIgLogin ? '/me' : `/${ig}`,
-    { fields: 'followers_count,follows_count,media_count,username', access_token: token },
+    { fields: 'followers_count,follows_count,media_count,username,profile_picture_url,biography', access_token: token },
     host,
   )
 
@@ -278,6 +278,8 @@ export async function syncAccount(accountId: string): Promise<void> {
       followers: profile.followers_count ?? account.followers,
       following: profile.follows_count ?? account.following,
       media_count: profile.media_count ?? account.media_count,
+      profile_picture_url: profile.profile_picture_url ?? account.profile_picture_url,
+      biography: profile.biography ?? account.biography,
       last_synced_at: new Date(),
     },
   })

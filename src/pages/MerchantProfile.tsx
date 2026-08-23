@@ -193,8 +193,8 @@ export default function MerchantProfile() {
             </div>
             {/* profile header */}
             <div className="px-4 py-2 flex items-center gap-5">
-              {merchant.logoUrl ? (
-                <img src={merchant.logoUrl} alt="" className="size-16 rounded-full object-cover" />
+              {live?.avatarUrl || merchant.logoUrl ? (
+                <img src={live?.avatarUrl ?? merchant.logoUrl} alt="" className="size-16 rounded-full object-cover" referrerPolicy="no-referrer" />
               ) : (
                 <div className="size-16 rounded-full nv-gradient flex items-center justify-center text-white font-display font-bold text-xl">
                   {merchant.name[0]}
@@ -217,7 +217,9 @@ export default function MerchantProfile() {
             </div>
             <div className="px-4 pb-3">
               <p className="text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">{merchant.name}</p>
-              {merchant.bio && <p className="text-[13px] text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap">{merchant.bio}</p>}
+              {(live?.bio || merchant.bio) && (
+                <p className="text-[13px] text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap">{live?.bio ?? merchant.bio}</p>
+              )}
               {merchant.location && <p className="text-[13px] text-neutral-500">{merchant.location}</p>}
             </div>
             {/* grid: planned posts first (coral dot), then the account's real

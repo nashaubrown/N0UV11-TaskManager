@@ -53,7 +53,7 @@ export default function Analytics() {
   const queryClient = useQueryClient()
 
   const [params, setParams] = useSearchParams()
-  const merchantId = params.get('merchant') ?? merchants[0]?.id ?? ''
+  const merchantId = params.get('merchant') ?? ''
   const merchant = merchants.find((m) => m.id === merchantId)
   const tab = (params.get('tab') as Tab) ?? 'overview'
   const [days, setDays] = useState(30)
@@ -121,6 +121,58 @@ export default function Analytics() {
     return <EmptyState title="No merchants yet" description="Add a merchant first — analytics are tracked per merchant." />
   }
 
+  // merchant-first: pick who you're looking at, then their analytics load
+  if (!merchantId) {
+    const accounts = status.data?.accounts ?? []
+    return (
+      <div className="grid gap-5">
+        <div>
+          <h1 className="font-display font-bold text-2xl text-ink">Analytics</h1>
+          <p className="text-sm text-ink-muted">Pick a merchant to open their Instagram performance, planner and reports.</p>
+        </div>
+        {notice && (
+          <p role="status" className={`text-sm rounded-(--nv-radius-md) border px-3.5 py-2.5 ${notice.tone === 'success' ? 'text-success bg-success-bg border-success/30' : 'text-error bg-error-bg border-error/30'}`}>
+            {notice.text}
+          </p>
+        )}
+        <div className="grid tablet:grid-cols-2 desktop:grid-cols-3 gap-4">
+          {merchants.map((m) => {
+            const acc = accounts.find((a) => a.merchantId === m.id)
+            return (
+              <button
+                key={m.id}
+                onClick={() => setParam('merchant', m.id)}
+                className="group flex items-center gap-3.5 rounded-(--nv-radius-lg) border border-border bg-surface p-4 text-left
+                           transition-colors hover:border-brand/50 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-brand"
+              >
+                {m.logoUrl ? (
+                  <img src={m.logoUrl} alt="" className="size-11 rounded-full object-cover shrink-0" />
+                ) : (
+                  <span className="size-11 rounded-full nv-gradient flex items-center justify-center text-on-brand font-display font-bold text-lg shrink-0">
+                    {m.name[0]}
+                  </span>
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-ink truncate">{m.name}</span>
+                  <span className="mt-1 block">
+                    {DEMO ? (
+                      <Badge tone="info">Sample data</Badge>
+                    ) : acc ? (
+                      <Badge tone="success">@{acc.username ?? 'connected'}</Badge>
+                    ) : (
+                      <Badge tone="neutral">Not connected</Badge>
+                    )}
+                  </span>
+                </span>
+                <ChevronRight className="size-4 text-ink-faint group-hover:text-ink shrink-0" aria-hidden />
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   const d = data.data
   const connected = DEMO || Boolean(d?.account)
 
@@ -128,8 +180,12 @@ export default function Analytics() {
     <div className="grid gap-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="font-display font-bold text-2xl text-ink">Analytics</h1>
-          <p className="text-sm text-ink-muted">Instagram performance, planning and reports per merchant.</p>
+          <button onClick={() => setParam('merchant', undefined)}
+                  className="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink transition-colors">
+            <ChevronLeft className="size-4" aria-hidden /> All merchants
+          </button>
+          <h1 className="font-display font-bold text-2xl text-ink mt-0.5">{merchant?.name ?? 'Analytics'}</h1>
+          <p className="text-sm text-ink-muted">Instagram performance, planning and reports.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Select aria-label="Merchant" value={merchantId} onChange={(e) => setParam('merchant', e.target.value)} className="min-w-44">
