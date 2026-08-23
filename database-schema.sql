@@ -491,6 +491,9 @@ CREATE TABLE social_accounts (
   connected_by     UUID REFERENCES users(id) ON DELETE SET NULL,
   connected_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_synced_at   TIMESTAMPTZ,
+  followers        INTEGER,
+  following        INTEGER,
+  media_count      INTEGER,
   UNIQUE (merchant_id, platform)
 );
 CREATE INDEX idx_social_accounts_org ON social_accounts (organization_id);

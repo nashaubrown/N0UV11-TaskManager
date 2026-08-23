@@ -90,6 +90,16 @@ export interface FeedItem {
   thumbUrl: string
 }
 
+/** The merchant's real (connected) Instagram account, for the feed preview. */
+export interface FeedLive {
+  username?: string
+  followers?: number
+  following?: number
+  mediaCount?: number
+  lastSyncedAt?: string
+  posts: { id: string; thumbUrl: string; permalink?: string; postedAt?: string }[]
+}
+
 export interface Project {
   id: string
   name: string

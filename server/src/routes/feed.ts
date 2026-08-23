@@ -43,10 +43,41 @@ export async function feedItemsFor(merchantId: string) {
     }))
 }
 
+/** The connected Instagram account's real profile + published grid, for the
+ *  feed preview. Null when the merchant has no Instagram connected. */
+async function liveAccountFor(merchantId: string) {
+  const account = await prisma.social_accounts.findFirst({ where: { merchant_id: merchantId } })
+  if (!account) return null
+  const posts = await prisma.social_posts.findMany({
+    where: { account_id: account.id },
+    orderBy: { posted_at: 'desc' },
+    take: 33,
+  })
+  return {
+    username: account.username ?? undefined,
+    followers: account.followers ?? undefined,
+    following: account.following ?? undefined,
+    mediaCount: account.media_count ?? posts.length,
+    lastSyncedAt: account.last_synced_at ?? undefined,
+    posts: posts
+      .filter((p) => p.thumbnail_url)
+      .map((p) => ({
+        id: p.ig_media_id,
+        thumbUrl: p.thumbnail_url!,
+        permalink: p.permalink ?? undefined,
+        postedAt: p.posted_at ?? undefined,
+      })),
+  }
+}
+
 /** GET /merchants/:id/feed */
 feedRouter.get('/:id/feed', async (req, res) => {
   const merchant = await loadMerchant(req.auth!.organizationId, param(req, 'id'))
-  res.json({ merchant: sMerchant(merchant), items: await feedItemsFor(merchant.id) })
+  res.json({
+    merchant: sMerchant(merchant),
+    items: await feedItemsFor(merchant.id),
+    live: await liveAccountFor(merchant.id),
+  })
 })
 
 /** POST /merchants/:id/feed — add an approved photo to the top of the plan. */
