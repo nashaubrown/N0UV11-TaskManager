@@ -173,9 +173,9 @@ export async function syncAccount(accountId: string): Promise<void> {
   const token = viaIgLogin ? await freshIgToken(account) : account.access_token
   const ig = account.ig_user_id
 
-  const profile = await graph<{ followers_count?: number; follows_count?: number; media_count?: number; username?: string; profile_picture_url?: string; biography?: string }>(
+  const profile = await graph<{ followers_count?: number; follows_count?: number; media_count?: number; username?: string; profile_picture_url?: string; biography?: string; name?: string; website?: string }>(
     viaIgLogin ? '/me' : `/${ig}`,
-    { fields: 'followers_count,follows_count,media_count,username,profile_picture_url,biography', access_token: token },
+    { fields: 'followers_count,follows_count,media_count,username,profile_picture_url,biography,name,website', access_token: token },
     host,
   )
 
@@ -234,6 +234,7 @@ export async function syncAccount(accountId: string): Promise<void> {
         comments_count: m.comments_count ?? null,
         reach: postReach,
         saved,
+        is_tagged: false,
         last_synced_at: new Date(),
       }
       await prisma.social_posts.upsert({
@@ -243,6 +244,35 @@ export async function syncAccount(accountId: string): Promise<void> {
       })
     }
   } catch { /* media listing can fail on brand-new accounts */ }
+
+  // tagged media — Instagram's "tagged" tab, which is also where collab
+  // posts authored by the partner account show up
+  try {
+    const tagged = await graph<{ data: { id: string; media_type?: string; media_url?: string; thumbnail_url?: string; permalink?: string; timestamp?: string; like_count?: number; comments_count?: number; caption?: string }[] }>(
+      `/${ig}/tags`,
+      { fields: 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count', limit: '30', access_token: token },
+      host,
+    )
+    for (const m of tagged.data) {
+      const data = {
+        caption: m.caption ?? null,
+        media_type: m.media_type ?? null,
+        thumbnail_url: m.thumbnail_url ?? m.media_url ?? null,
+        permalink: m.permalink ?? null,
+        posted_at: m.timestamp ? new Date(m.timestamp) : null,
+        like_count: m.like_count ?? null,
+        comments_count: m.comments_count ?? null,
+        is_tagged: true,
+        last_synced_at: new Date(),
+      }
+      await prisma.social_posts.upsert({
+        where: { account_id_ig_media_id: { account_id: account.id, ig_media_id: m.id } },
+        create: { account_id: account.id, ig_media_id: m.id, ...data },
+        // a post can be both own media and tagged (collabs) — own media wins
+        update: { ...data, is_tagged: undefined },
+      })
+    }
+  } catch { /* the tags edge isn't available on every login kind — fine */ }
 
   // audience online times → dow × hour heatmap
   try {
@@ -280,6 +310,8 @@ export async function syncAccount(accountId: string): Promise<void> {
       media_count: profile.media_count ?? account.media_count,
       profile_picture_url: profile.profile_picture_url ?? account.profile_picture_url,
       biography: profile.biography ?? account.biography,
+      display_name: profile.name ?? account.display_name,
+      website: profile.website ?? account.website,
       last_synced_at: new Date(),
     },
   })

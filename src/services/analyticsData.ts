@@ -97,7 +97,7 @@ export function demoAnalytics(merchantId: string, igHandle: string | undefined, 
     return {
       id: `demo-${p.id}`,
       caption: p.title,
-      mediaType: 'IMAGE',
+      mediaType: i % 3 === 1 ? 'VIDEO' : i % 4 === 2 ? 'CAROUSEL_ALBUM' : 'IMAGE',
       thumbUrl: p.thumbUrl,
       postedAt: new Date(today.getTime() - (i * 2.5 + 1) * 86_400_000).toISOString(),
       likes,

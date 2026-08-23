@@ -497,6 +497,8 @@ CREATE TABLE social_accounts (
   auth_kind        TEXT NOT NULL DEFAULT 'facebook',  -- 'facebook' (Page-linked) | 'instagram' (IG login)
   profile_picture_url TEXT,
   biography        TEXT,
+  display_name     TEXT,
+  website          TEXT,
   UNIQUE (merchant_id, platform)
 );
 CREATE INDEX idx_social_accounts_org ON social_accounts (organization_id);
@@ -525,6 +527,7 @@ CREATE TABLE social_posts (
   comments_count INTEGER,
   reach          INTEGER,
   saved          INTEGER,
+  is_tagged      BOOLEAN NOT NULL DEFAULT false,  -- from the /tags edge (incl. collab posts)
   last_synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (account_id, ig_media_id)
 );

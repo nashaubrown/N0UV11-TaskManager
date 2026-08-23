@@ -60,6 +60,8 @@ async function liveAccountFor(merchantId: string) {
     mediaCount: account.media_count ?? posts.length,
     avatarUrl: account.profile_picture_url ?? undefined,
     bio: account.biography ?? undefined,
+    name: account.display_name ?? undefined,
+    website: account.website ?? undefined,
     lastSyncedAt: account.last_synced_at ?? undefined,
     posts: posts
       .filter((p) => p.thumbnail_url)
@@ -68,6 +70,8 @@ async function liveAccountFor(merchantId: string) {
         thumbUrl: p.thumbnail_url!,
         permalink: p.permalink ?? undefined,
         postedAt: p.posted_at ?? undefined,
+        mediaType: p.media_type ?? undefined,
+        tagged: p.is_tagged,
       })),
   }
 }

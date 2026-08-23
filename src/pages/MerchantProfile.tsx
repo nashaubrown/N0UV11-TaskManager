@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Bookmark, ChartColumn, Grid3x3, Heart, MessageCircle, Plus, Send, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowLeft, Bookmark, ChartColumn, ChevronDown, Copy, Grid3x3, Heart, Link2, MessageCircle, Play, Plus, Send, Sparkles, SquarePlay, SquareUser, Trash2, UserPlus } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { Button } from '../components/common/Button'
@@ -27,6 +27,7 @@ export default function MerchantProfile() {
   const [loaded, setLoaded] = useState(false)
   const [ratio, setRatio] = useState<'1:1' | '3:4'>('3:4')
   const [openItem, setOpenItem] = useState<FeedItem | null>(null)
+  const [igTab, setIgTab] = useState<'grid' | 'reels' | 'tagged'>('grid')
   const [caption, setCaption] = useState('')
   const [captionBusy, setCaptionBusy] = useState(false)
   const [error, setError] = useState<string>()
@@ -44,11 +45,12 @@ export default function MerchantProfile() {
       const a = demoAnalytics(merchantId, demoMerchant?.igHandle, photos)
       setLive({
         username: a.account?.username,
+        name: demoMerchant?.name,
         followers: a.series.at(-1)?.followers,
         following: Math.round((a.series.at(-1)?.followers ?? 0) * 0.12),
         mediaCount: a.posts.length,
         lastSyncedAt: a.account?.lastSyncedAt,
-        posts: a.posts.filter((p) => p.thumbUrl).map((p) => ({ id: p.id, thumbUrl: p.thumbUrl!, postedAt: p.postedAt })),
+        posts: a.posts.filter((p) => p.thumbUrl).map((p) => ({ id: p.id, thumbUrl: p.thumbUrl!, postedAt: p.postedAt, mediaType: p.mediaType })),
       })
       setLoaded(true)
       return
@@ -191,82 +193,142 @@ export default function MerchantProfile() {
               )}
               <Grid3x3 className="size-4 text-neutral-500" aria-hidden />
             </div>
-            {/* profile header */}
-            <div className="px-4 py-2 flex items-center gap-5">
+            {/* profile header — matches the Instagram mobile layout */}
+            <div className="px-4 py-2 flex items-start gap-6">
               {live?.avatarUrl || merchant.logoUrl ? (
-                <img src={live?.avatarUrl ?? merchant.logoUrl} alt="" className="size-16 rounded-full object-cover" referrerPolicy="no-referrer" />
+                <img src={live?.avatarUrl ?? merchant.logoUrl} alt="" className="size-20 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
               ) : (
-                <div className="size-16 rounded-full nv-gradient flex items-center justify-center text-white font-display font-bold text-xl">
+                <div className="size-20 rounded-full nv-gradient flex items-center justify-center text-white font-display font-bold text-2xl shrink-0">
                   {merchant.name[0]}
                 </div>
               )}
-              <div className="flex-1 flex justify-around text-center text-[13px] text-neutral-900 dark:text-neutral-100">
-                <div>
-                  <p className="font-semibold">{(live?.mediaCount ?? 0) + items.length}</p>
-                  <p className="text-neutral-500">posts</p>
-                </div>
-                <div>
-                  <p className="font-semibold">{live?.followers !== undefined ? compact(live.followers) : '—'}</p>
-                  <p className="text-neutral-500">followers</p>
-                </div>
-                <div>
-                  <p className="font-semibold">{live?.following !== undefined ? compact(live.following) : '—'}</p>
-                  <p className="text-neutral-500">following</p>
+              <div className="flex-1 min-w-0 pt-1">
+                <p className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+                  {live?.name ?? merchant.name}
+                </p>
+                <div className="flex gap-7 mt-2 text-neutral-900 dark:text-neutral-100">
+                  <div>
+                    <p className="text-[15px] font-semibold leading-tight">{(live?.mediaCount ?? 0) + items.length}</p>
+                    <p className="text-[13px] leading-tight">posts</p>
+                  </div>
+                  <div>
+                    <p className="text-[15px] font-semibold leading-tight">{live?.followers !== undefined ? compact(live.followers) : '—'}</p>
+                    <p className="text-[13px] leading-tight">followers</p>
+                  </div>
+                  <div>
+                    <p className="text-[15px] font-semibold leading-tight">{live?.following !== undefined ? compact(live.following) : '—'}</p>
+                    <p className="text-[13px] leading-tight">following</p>
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="px-4 pb-3">
-              <p className="text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">{merchant.name}</p>
+            <div className="px-4 pb-2">
               {(live?.bio || merchant.bio) && (
-                <p className="text-[13px] text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap">{live?.bio ?? merchant.bio}</p>
+                <p className="text-[13px] text-neutral-900 dark:text-neutral-100 whitespace-pre-wrap">{live?.bio ?? merchant.bio}</p>
               )}
-              {merchant.location && <p className="text-[13px] text-neutral-500">{merchant.location}</p>}
+              {live?.website && (
+                <a href={live.website.startsWith('http') ? live.website : `https://${live.website}`} target="_blank" rel="noreferrer"
+                   className="inline-flex items-center gap-1 text-[13px] font-medium text-[#4150f7] dark:text-[#8a98ff]">
+                  <Link2 className="size-3.5 -rotate-45" aria-hidden />
+                  {live.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                </a>
+              )}
+              {!live?.website && merchant.location && <p className="text-[13px] text-neutral-500">{merchant.location}</p>}
             </div>
-            {/* grid: planned posts first (coral dot), then the account's real
-                published posts — how the feed will look once the plan ships */}
-            {items.length === 0 && (live?.posts.length ?? 0) === 0 ? (
-              <p className="flex-1 grid place-items-center text-center text-[13px] text-neutral-500 px-6">
-                No posts planned yet — add approved photos from the tray.
-              </p>
-            ) : (
-              <div className="grid grid-cols-3 gap-px bg-white dark:bg-neutral-950">
-                {items.map((item) => (
-                  <button
-                    key={item.photoId}
-                    draggable
-                    onDragStart={() => setDragId(item.photoId)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => onDrop(item.photoId)}
-                    onClick={() => { setOpenItem(item); setCaption(item.caption ?? '') }}
-                    className={clsx(
-                      'relative overflow-hidden bg-neutral-200 cursor-grab active:cursor-grabbing',
-                      ratio === '1:1' ? 'aspect-square' : 'aspect-[3/4]',
-                      dragId === item.photoId && 'opacity-50',
-                    )}
-                    aria-label={item.title ?? 'Planned post'}
-                  >
-                    <img src={item.thumbUrl} alt="" className="absolute inset-0 size-full object-cover" draggable={false} />
-                    <span className="absolute top-1.5 right-1.5 size-2.5 rounded-full nv-gradient ring-2 ring-white/80" title="Planned — not posted yet" />
-                  </button>
-                ))}
-                {live?.posts.map((p) => (
-                  <a
-                    key={p.id}
-                    href={p.permalink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={clsx(
-                      'relative overflow-hidden bg-neutral-200',
-                      ratio === '1:1' ? 'aspect-square' : 'aspect-[3/4]',
-                      !p.permalink && 'pointer-events-none',
-                    )}
-                    aria-label="Published Instagram post"
-                  >
-                    <img src={p.thumbUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
-                  </a>
-                ))}
-              </div>
-            )}
+            {/* action pills — decorative, part of the realistic preview */}
+            <div className="px-4 pb-3 flex gap-1.5" aria-hidden>
+              <span className="flex-1 h-8 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-[13px] font-semibold flex items-center justify-center gap-1">
+                Following <ChevronDown className="size-3.5" />
+              </span>
+              <span className="flex-1 h-8 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-[13px] font-semibold flex items-center justify-center">
+                Message
+              </span>
+              <span className="w-9 h-8 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 flex items-center justify-center">
+                <UserPlus className="size-4" />
+              </span>
+            </div>
+            {/* profile tabs: grid (plan + published) · reels · tagged */}
+            {(() => {
+              const livePosts = live?.posts ?? []
+              const shown =
+                igTab === 'reels' ? livePosts.filter((p) => !p.tagged && p.mediaType === 'VIDEO')
+                : igTab === 'tagged' ? livePosts.filter((p) => p.tagged)
+                : livePosts.filter((p) => !p.tagged)
+              const empty =
+                igTab === 'reels' ? 'No reels published yet.'
+                : igTab === 'tagged' ? 'No tagged posts — collabs and tags land here after a sync.'
+                : 'No posts planned yet — add approved photos from the tray.'
+              return (
+                <>
+                  <div className="flex border-t border-neutral-200 dark:border-neutral-800" role="tablist" aria-label="Profile tabs">
+                    {([['grid', Grid3x3], ['reels', SquarePlay], ['tagged', SquareUser]] as const).map(([t, Icon]) => (
+                      <button
+                        key={t}
+                        role="tab"
+                        aria-selected={igTab === t}
+                        aria-label={t}
+                        onClick={() => setIgTab(t)}
+                        className={clsx(
+                          'flex-1 flex justify-center py-2.5 -mb-px transition-colors',
+                          igTab === t
+                            ? 'border-b-2 border-neutral-900 dark:border-white text-neutral-900 dark:text-white'
+                            : 'text-neutral-400',
+                        )}
+                      >
+                        <Icon className="size-5" aria-hidden />
+                      </button>
+                    ))}
+                  </div>
+                  {(igTab !== 'grid' || items.length === 0) && shown.length === 0 ? (
+                    <p className="flex-1 grid place-items-center text-center text-[13px] text-neutral-500 px-6 py-10">{empty}</p>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-px bg-white dark:bg-neutral-950">
+                      {igTab === 'grid' && items.map((item) => (
+                        <button
+                          key={item.photoId}
+                          draggable
+                          onDragStart={() => setDragId(item.photoId)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => onDrop(item.photoId)}
+                          onClick={() => { setOpenItem(item); setCaption(item.caption ?? '') }}
+                          className={clsx(
+                            'relative overflow-hidden bg-neutral-200 cursor-grab active:cursor-grabbing',
+                            ratio === '1:1' ? 'aspect-square' : 'aspect-[3/4]',
+                            dragId === item.photoId && 'opacity-50',
+                          )}
+                          aria-label={item.title ?? 'Planned post'}
+                        >
+                          <img src={item.thumbUrl} alt="" className="absolute inset-0 size-full object-cover" draggable={false} />
+                          <span className="absolute top-1.5 right-1.5 size-2.5 rounded-full nv-gradient ring-2 ring-white/80" title="Planned — not posted yet" />
+                        </button>
+                      ))}
+                      {shown.map((p) => (
+                        <a
+                          key={p.id}
+                          href={p.permalink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={clsx(
+                            'relative overflow-hidden bg-neutral-200',
+                            igTab === 'reels' ? 'aspect-[9/16]' : ratio === '1:1' ? 'aspect-square' : 'aspect-[3/4]',
+                            !p.permalink && 'pointer-events-none',
+                          )}
+                          aria-label="Published Instagram post"
+                        >
+                          <img src={p.thumbUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+                          {p.mediaType === 'VIDEO' && igTab !== 'reels' && (
+                            <Play className="absolute top-1.5 right-1.5 size-3.5 text-white drop-shadow" fill="currentColor" aria-hidden />
+                          )}
+                          {p.mediaType === 'CAROUSEL_ALBUM' && (
+                            <Copy className="absolute top-1.5 right-1.5 size-3.5 text-white drop-shadow" aria-hidden />
+                          )}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
             {live && (
               <p className="text-center text-[11px] text-neutral-400 py-2">
                 Live from @{live.username ?? handle}
