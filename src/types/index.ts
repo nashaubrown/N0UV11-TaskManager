@@ -96,6 +96,8 @@ export interface FeedLive {
   followers?: number
   following?: number
   mediaCount?: number
+  avatarUrl?: string
+  bio?: string
   lastSyncedAt?: string
   posts: { id: string; thumbUrl: string; permalink?: string; postedAt?: string }[]
 }
