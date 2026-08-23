@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type Response } from 'express'
 import jwt from 'jsonwebtoken'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
@@ -8,7 +8,7 @@ import { param } from '../lib/params.js'
 import { requireAuth } from '../middleware/auth.js'
 import { requireCapability } from '../lib/permissions.js'
 import { audit } from '../services/audit.js'
-import { oauthUrl, exchangeCode, findIgAccount, enqueueSync, syncAccount } from '../services/meta.js'
+import { oauthUrl, exchangeCode, findIgAccount, igOauthUrl, exchangeIgCode, enqueueSync, syncAccount } from '../services/meta.js'
 
 /* Metricool-style Instagram analytics. Connections are per merchant; viewing
  * is open to any signed-in member, connect/disconnect/sync needs
@@ -20,20 +20,28 @@ export const analyticsRouter = Router()
 const stateFor = (orgId: string, merchantId: string, userId: string) =>
   jwt.sign({ org: orgId, merchant: merchantId, user: userId, purpose: 'ig-connect' }, config.jwt.secret, { expiresIn: '15m' })
 
-/** GET /analytics/oauth/callback — Facebook redirects here. PUBLIC. */
-analyticsRouter.get('/oauth/callback', async (req, res) => {
-  const back = (merchantId: string | undefined, q: string) =>
-    res.redirect(`${config.webOrigin}/analytics${merchantId ? `?merchant=${merchantId}&` : '?'}${q}`)
-  const state = typeof req.query.state === 'string' ? req.query.state : ''
-  let claims: { org: string; merchant: string; user: string; purpose: string }
+type ConnectClaims = { org: string; merchant: string; user: string; purpose: string }
+
+const verifyState = (state: unknown): ConnectClaims | null => {
   try {
-    claims = jwt.verify(state, config.jwt.secret) as typeof claims
-    if (claims.purpose !== 'ig-connect') throw new Error('wrong purpose')
+    const claims = jwt.verify(typeof state === 'string' ? state : '', config.jwt.secret) as ConnectClaims
+    return claims.purpose === 'ig-connect' ? claims : null
   } catch {
-    return back(undefined, 'ig=error&reason=' + encodeURIComponent('The connect link expired — try again from the Analytics page.'))
+    return null
+  }
+}
+
+const backTo = (res: Response, merchantId: string | undefined, q: string) =>
+  res.redirect(`${config.webOrigin}/analytics${merchantId ? `?merchant=${merchantId}&` : '?'}${q}`)
+
+/** GET /analytics/oauth/callback — Facebook (Page flow) redirects here. PUBLIC. */
+analyticsRouter.get('/oauth/callback', async (req, res) => {
+  const claims = verifyState(req.query.state)
+  if (!claims) {
+    return backTo(res, undefined, 'ig=error&reason=' + encodeURIComponent('The connect link expired — try again from the Analytics page.'))
   }
   if (typeof req.query.code !== 'string') {
-    return back(claims.merchant, 'ig=error&reason=' + encodeURIComponent(String(req.query.error_description ?? 'Facebook did not authorize the connection.')))
+    return backTo(res, claims.merchant, 'ig=error&reason=' + encodeURIComponent(String(req.query.error_description ?? 'Facebook did not authorize the connection.')))
   }
   try {
     const userToken = await exchangeCode(req.query.code)
@@ -44,17 +52,58 @@ analyticsRouter.get('/oauth/callback', async (req, res) => {
         organization_id: claims.org,
         merchant_id: claims.merchant,
         platform: 'instagram',
+        auth_kind: 'facebook',
         ig_user_id: ig.igUserId,
         username: ig.username,
         access_token: ig.pageToken,
         connected_by: claims.user,
       },
-      update: { ig_user_id: ig.igUserId, username: ig.username, access_token: ig.pageToken, connected_at: new Date() },
+      update: { auth_kind: 'facebook', ig_user_id: ig.igUserId, username: ig.username, access_token: ig.pageToken, token_expires_at: null, connected_at: new Date() },
     })
     enqueueSync(account.id)
-    return back(claims.merchant, 'ig=connected')
+    return backTo(res, claims.merchant, 'ig=connected')
   } catch (err) {
-    return back(claims.merchant, 'ig=error&reason=' + encodeURIComponent(err instanceof Error ? err.message : 'Connection failed'))
+    return backTo(res, claims.merchant, 'ig=error&reason=' + encodeURIComponent(err instanceof Error ? err.message : 'Connection failed'))
+  }
+})
+
+/** GET /analytics/oauth/instagram/callback — Instagram login (no Page) redirects here. PUBLIC. */
+analyticsRouter.get('/oauth/instagram/callback', async (req, res) => {
+  const claims = verifyState(req.query.state)
+  if (!claims) {
+    return backTo(res, undefined, 'ig=error&reason=' + encodeURIComponent('The connect link expired — try again from the Analytics page.'))
+  }
+  if (typeof req.query.code !== 'string') {
+    return backTo(res, claims.merchant, 'ig=error&reason=' + encodeURIComponent(String(req.query.error_description ?? req.query.error_reason ?? 'Instagram did not authorize the connection.')))
+  }
+  try {
+    const ig = await exchangeIgCode(req.query.code)
+    const account = await prisma.social_accounts.upsert({
+      where: { merchant_id_platform: { merchant_id: claims.merchant, platform: 'instagram' } },
+      create: {
+        organization_id: claims.org,
+        merchant_id: claims.merchant,
+        platform: 'instagram',
+        auth_kind: 'instagram',
+        ig_user_id: ig.igUserId,
+        username: ig.username,
+        access_token: ig.token,
+        token_expires_at: ig.expiresAt,
+        connected_by: claims.user,
+      },
+      update: {
+        auth_kind: 'instagram',
+        ig_user_id: ig.igUserId,
+        username: ig.username,
+        access_token: ig.token,
+        token_expires_at: ig.expiresAt,
+        connected_at: new Date(),
+      },
+    })
+    enqueueSync(account.id)
+    return backTo(res, claims.merchant, 'ig=connected')
+  } catch (err) {
+    return backTo(res, claims.merchant, 'ig=error&reason=' + encodeURIComponent(err instanceof Error ? err.message : 'Connection failed'))
   }
 })
 
@@ -67,8 +116,10 @@ analyticsRouter.get('/status', async (req, res) => {
     orderBy: { connected_at: 'desc' },
   })
   res.json({
-    configured: config.meta.configured,
+    configured: config.meta.configured || config.meta.igConfigured,
+    providers: { facebook: config.meta.configured, instagram: config.meta.igConfigured },
     redirectUrl: config.meta.redirectUrl,
+    igRedirectUrl: config.meta.igRedirectUrl,
     accounts: accounts.map((a) => ({
       merchantId: a.merchant_id,
       username: a.username ?? undefined,
@@ -84,14 +135,24 @@ async function loadMerchant(orgId: string, id: string) {
   return m
 }
 
-/** POST /analytics/:merchantId/connect — start the Facebook OAuth dialog. */
+/** POST /analytics/:merchantId/connect — start an OAuth dialog.
+ *  body.provider: 'instagram' (IG login, no Page — default when configured)
+ *  or 'facebook' (Page-linked flow). */
 analyticsRouter.post('/:merchantId/connect', requireCapability('merchants.manage'), async (req, res) => {
-  if (!config.meta.configured) {
-    throw badRequest('Instagram analytics needs META_APP_ID and META_APP_SECRET configured on the server')
+  const requested = req.body?.provider
+  const provider: 'instagram' | 'facebook' =
+    requested === 'facebook' || requested === 'instagram'
+      ? requested
+      : config.meta.igConfigured ? 'instagram' : 'facebook'
+  if (provider === 'instagram' && !config.meta.igConfigured) {
+    throw badRequest('Instagram login needs IG_APP_ID and IG_APP_SECRET configured on the server')
+  }
+  if (provider === 'facebook' && !config.meta.configured) {
+    throw badRequest('The Facebook flow needs META_APP_ID and META_APP_SECRET configured on the server')
   }
   const merchant = await loadMerchant(req.auth!.organizationId, param(req, 'merchantId'))
-  const url = oauthUrl(stateFor(req.auth!.organizationId, merchant.id, req.auth!.userId))
-  res.json({ url })
+  const state = stateFor(req.auth!.organizationId, merchant.id, req.auth!.userId)
+  res.json({ url: provider === 'instagram' ? igOauthUrl(state) : oauthUrl(state) })
 })
 
 /** POST /analytics/:merchantId/sync — pull fresh numbers now. */
@@ -120,7 +181,11 @@ analyticsRouter.get('/:merchantId', async (req, res) => {
   const days = daysDto.parse(req.query.days ?? 30)
   const account = await prisma.social_accounts.findFirst({ where: { merchant_id: merchant.id } })
   if (!account) {
-    return res.json({ configured: config.meta.configured, account: null, series: [], posts: [], onlineTimes: [] })
+    return res.json({
+      configured: config.meta.configured || config.meta.igConfigured,
+      providers: { facebook: config.meta.configured, instagram: config.meta.igConfigured },
+      account: null, series: [], posts: [], onlineTimes: [],
+    })
   }
 
   // refresh in the background when numbers are stale (>6h)
@@ -143,7 +208,8 @@ analyticsRouter.get('/:merchantId', async (req, res) => {
   ])
 
   res.json({
-    configured: config.meta.configured,
+    configured: config.meta.configured || config.meta.igConfigured,
+    providers: { facebook: config.meta.configured, instagram: config.meta.igConfigured },
     account: {
       username: account.username ?? undefined,
       connectedAt: account.connected_at,

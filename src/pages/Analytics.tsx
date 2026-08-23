@@ -21,7 +21,7 @@ import { OnlineHeatmap } from '../components/analytics/OnlineHeatmap'
 import { api, absoluteUrl, DEMO } from '../services/api'
 import {
   demoAnalytics, fetchAnalytics, fetchAnalyticsStatus, startConnect, syncNow, disconnect,
-  type AnalyticsData, type AnalyticsPost,
+  type AnalyticsData, type AnalyticsPost, type AnalyticsProviders,
 } from '../services/analyticsData'
 import { useAuth } from '../store/auth'
 import { useData } from '../store/data'
@@ -81,10 +81,10 @@ export default function Analytics() {
     refetchInterval: DEMO ? false : 30_000,
   })
 
-  const connect = async () => {
+  const connect = async (provider: 'instagram' | 'facebook') => {
     setBusy(true)
     try {
-      const { url } = await startConnect(merchantId)
+      const { url } = await startConnect(merchantId, provider)
       window.location.href = url
     } catch (e) {
       setNotice({ tone: 'error', text: e instanceof Error ? e.message : 'Could not start the connection' })
@@ -177,10 +177,12 @@ export default function Analytics() {
           return (
             <ConnectCard
               configured={Boolean(d?.configured ?? status.data?.configured)}
+              providers={d?.providers ?? status.data?.providers}
               redirectUrl={status.data?.redirectUrl}
+              igRedirectUrl={status.data?.igRedirectUrl}
               canManage={canManage}
               busy={busy}
-              onConnect={() => void connect()}
+              onConnect={(provider) => void connect(provider)}
               merchantName={merchant?.name ?? 'this merchant'}
             />
           )
@@ -203,12 +205,14 @@ export default function Analytics() {
 
 /* ---------- connect / setup ---------- */
 
-function ConnectCard({ configured, redirectUrl, canManage, busy, onConnect, merchantName }: {
+function ConnectCard({ configured, providers, redirectUrl, igRedirectUrl, canManage, busy, onConnect, merchantName }: {
   configured: boolean
+  providers?: AnalyticsProviders
   redirectUrl?: string
+  igRedirectUrl?: string
   canManage: boolean
   busy: boolean
-  onConnect: () => void
+  onConnect: (provider: 'instagram' | 'facebook') => void
   merchantName: string
 }) {
   if (!configured) {
@@ -216,14 +220,25 @@ function ConnectCard({ configured, redirectUrl, canManage, busy, onConnect, merc
       <Card padding="lg" className="max-w-2xl">
         <CardHeader title="Set up Instagram analytics" subtitle="One-time Meta app setup by the studio" />
         <ol className="list-decimal ml-5 mt-3 grid gap-2 text-sm text-ink-2">
-          <li>Create an app at <span className="font-medium text-ink">developers.facebook.com</span> (type “Business”), and add the <span className="font-medium text-ink">Facebook Login for Business</span> product.</li>
-          <li>Add this OAuth redirect URL in the app's Facebook Login settings:{' '}
-            <code className="text-xs bg-surface-2 border border-border rounded px-1.5 py-0.5 break-all">{redirectUrl ?? 'https://<your-api>/api/analytics/oauth/callback'}</code>
+          <li>Create an app at <span className="font-medium text-ink">developers.facebook.com</span> (type “Business”).</li>
+          <li>
+            <span className="font-medium text-ink">Instagram-only merchants (no Facebook Page):</span> add the{' '}
+            <span className="font-medium text-ink">Instagram</span> product (“API setup with Instagram business login”),
+            register the redirect URL{' '}
+            <code className="text-xs bg-surface-2 border border-border rounded px-1.5 py-0.5 break-all">{igRedirectUrl ?? 'https://<your-api>/api/analytics/oauth/instagram/callback'}</code>{' '}
+            there, and set <code className="text-xs bg-surface-2 border border-border rounded px-1.5 py-0.5">IG_APP_ID</code> +{' '}
+            <code className="text-xs bg-surface-2 border border-border rounded px-1.5 py-0.5">IG_APP_SECRET</code> on the server.
           </li>
-          <li>Set <code className="text-xs bg-surface-2 border border-border rounded px-1.5 py-0.5">META_APP_ID</code> and <code className="text-xs bg-surface-2 border border-border rounded px-1.5 py-0.5">META_APP_SECRET</code> on the server and restart it.</li>
-          <li>Each merchant's Instagram must be a <span className="font-medium text-ink">professional account linked to a Facebook Page</span> you manage.</li>
+          <li>
+            <span className="font-medium text-ink">Page-linked merchants (optional fallback):</span> add{' '}
+            <span className="font-medium text-ink">Facebook Login for Business</span>, register{' '}
+            <code className="text-xs bg-surface-2 border border-border rounded px-1.5 py-0.5 break-all">{redirectUrl ?? 'https://<your-api>/api/analytics/oauth/callback'}</code>,
+            and set <code className="text-xs bg-surface-2 border border-border rounded px-1.5 py-0.5">META_APP_ID</code> +{' '}
+            <code className="text-xs bg-surface-2 border border-border rounded px-1.5 py-0.5">META_APP_SECRET</code>.
+          </li>
+          <li>The merchant's Instagram must be a <span className="font-medium text-ink">professional account</span> (Business or Creator).</li>
         </ol>
-        <p className="text-xs text-ink-muted mt-3">Once configured, a “Connect Instagram” button appears here for every merchant.</p>
+        <p className="text-xs text-ink-muted mt-3">Once configured, connect buttons appear here for every merchant.</p>
       </Card>
     )
   }
@@ -235,11 +250,30 @@ function ConnectCard({ configured, redirectUrl, canManage, busy, onConnect, merc
       <div>
         <h2 className="font-display font-semibold text-lg text-ink">Connect {merchantName}'s Instagram</h2>
         <p className="text-sm text-ink-muted mt-1">
-          Log in with the Facebook account that manages the merchant's Page. NOUVII pulls followers, reach, post performance and audience times — read-only.
+          NOUVII pulls followers, reach, post performance and audience times — read-only.
         </p>
       </div>
       {canManage ? (
-        <Button onClick={onConnect} disabled={busy}>{busy ? 'Opening Facebook…' : 'Connect Instagram'}</Button>
+        <div className="grid gap-2 justify-items-center">
+          {providers?.instagram !== false && (
+            <Button onClick={() => onConnect('instagram')} disabled={busy}>
+              {busy ? 'Opening Instagram…' : 'Log in with Instagram'}
+            </Button>
+          )}
+          {providers?.facebook && (
+            <Button
+              variant={providers?.instagram === false ? 'primary' : 'secondary'}
+              size={providers?.instagram === false ? 'md' : 'sm'}
+              onClick={() => onConnect('facebook')}
+              disabled={busy}
+            >
+              {providers?.instagram === false ? 'Connect via Facebook' : 'Use Facebook instead (Page-linked account)'}
+            </Button>
+          )}
+          <p className="text-xs text-ink-muted max-w-sm">
+            Instagram login works with just the merchant's IG professional account — no Facebook Page needed.
+          </p>
+        </div>
       ) : (
         <p className="text-sm text-ink-muted">Ask someone with merchant-management access to connect it.</p>
       )}
