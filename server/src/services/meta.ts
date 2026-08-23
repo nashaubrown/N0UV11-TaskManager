@@ -96,9 +96,9 @@ export async function syncAccount(accountId: string): Promise<void> {
   const token = account.access_token
   const ig = account.ig_user_id
 
-  const profile = await graph<{ followers_count?: number; media_count?: number; username?: string }>(
+  const profile = await graph<{ followers_count?: number; follows_count?: number; media_count?: number; username?: string }>(
     `/${ig}`,
-    { fields: 'followers_count,media_count,username', access_token: token },
+    { fields: 'followers_count,follows_count,media_count,username', access_token: token },
   )
 
   const [reach, impressions, profileViews, websiteClicks] = await Promise.all([
@@ -192,7 +192,13 @@ export async function syncAccount(accountId: string): Promise<void> {
 
   await prisma.social_accounts.update({
     where: { id: account.id },
-    data: { username: profile.username ?? account.username, last_synced_at: new Date() },
+    data: {
+      username: profile.username ?? account.username,
+      followers: profile.followers_count ?? account.followers,
+      following: profile.follows_count ?? account.following,
+      media_count: profile.media_count ?? account.media_count,
+      last_synced_at: new Date(),
+    },
   })
 }
 

@@ -8,7 +8,10 @@ import { Card } from '../components/common/Card'
 import { EmptyState } from '../components/common/EmptyState'
 import { api, absoluteUrl, DEMO } from '../services/api'
 import { useData } from '../store/data'
-import type { FeedItem } from '../types'
+import { demoAnalytics } from '../services/analyticsData'
+import { compact } from '../components/analytics/MetricChart'
+import { timeAgo } from '../utils/format'
+import type { FeedItem, FeedLive } from '../types'
 
 /* Instagram-style feed planner: profile header + 3-column grid inside a
  * phone frame. Order = posting order (top-left is most recent). Drag to
@@ -20,6 +23,7 @@ export default function MerchantProfile() {
   const merchant = merchants.find((m) => m.id === merchantId)
 
   const [items, setItems] = useState<FeedItem[]>([])
+  const [live, setLive] = useState<FeedLive | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [ratio, setRatio] = useState<'1:1' | '3:4'>('3:4')
   const [openItem, setOpenItem] = useState<FeedItem | null>(null)
@@ -36,11 +40,24 @@ export default function MerchantProfile() {
           .filter((p) => p.merchantId === merchantId && p.approvalStatus === 'approved')
           .map((p, i) => ({ photoId: p.id, position: i, title: p.title, url: p.url, thumbUrl: p.thumbUrl })),
       )
+      const demoMerchant = merchants.find((m) => m.id === merchantId)
+      const a = demoAnalytics(merchantId, demoMerchant?.igHandle, photos)
+      setLive({
+        username: a.account?.username,
+        followers: a.series.at(-1)?.followers,
+        following: Math.round((a.series.at(-1)?.followers ?? 0) * 0.12),
+        mediaCount: a.posts.length,
+        lastSyncedAt: a.account?.lastSyncedAt,
+        posts: a.posts.filter((p) => p.thumbUrl).map((p) => ({ id: p.id, thumbUrl: p.thumbUrl!, postedAt: p.postedAt })),
+      })
       setLoaded(true)
       return
     }
-    api<{ items: FeedItem[] }>('GET', `/merchants/${merchantId}/feed`)
-      .then((d) => setItems(d.items.map((i) => ({ ...i, url: absoluteUrl(i.url), thumbUrl: absoluteUrl(i.thumbUrl) }))))
+    api<{ items: FeedItem[]; live: FeedLive | null }>('GET', `/merchants/${merchantId}/feed`)
+      .then((d) => {
+        setItems(d.items.map((i) => ({ ...i, url: absoluteUrl(i.url), thumbUrl: absoluteUrl(i.thumbUrl) })))
+        setLive(d.live)
+      })
       .catch((e) => setError(e instanceof Error ? e.message : 'Could not load the feed'))
       .finally(() => setLoaded(true))
   }, [merchantId, photos])
@@ -119,7 +136,8 @@ export default function MerchantProfile() {
     return <EmptyState title="Merchant not found" description="It may have been removed." />
   }
 
-  const handle = merchant.igHandle || merchant.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const handle = live?.username || merchant.igHandle || merchant.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const igUrl = live?.username ? `https://instagram.com/${live.username}` : undefined
 
   return (
     <div className="grid gap-4">
@@ -163,7 +181,14 @@ export default function MerchantProfile() {
               <div className="w-28 h-6 rounded-full bg-black" />
             </div>
             <div className="px-4 pb-2 flex items-center justify-between">
-              <span className="font-semibold text-[15px] text-neutral-900 dark:text-neutral-100">{handle}</span>
+              {igUrl ? (
+                <a href={igUrl} target="_blank" rel="noreferrer"
+                   className="font-semibold text-[15px] text-neutral-900 dark:text-neutral-100 hover:underline">
+                  {handle}
+                </a>
+              ) : (
+                <span className="font-semibold text-[15px] text-neutral-900 dark:text-neutral-100">{handle}</span>
+              )}
               <Grid3x3 className="size-4 text-neutral-500" aria-hidden />
             </div>
             {/* profile header */}
@@ -176,9 +201,18 @@ export default function MerchantProfile() {
                 </div>
               )}
               <div className="flex-1 flex justify-around text-center text-[13px] text-neutral-900 dark:text-neutral-100">
-                <div><p className="font-semibold">{items.length}</p><p className="text-neutral-500">posts</p></div>
-                <div><p className="font-semibold">—</p><p className="text-neutral-500">followers</p></div>
-                <div><p className="font-semibold">—</p><p className="text-neutral-500">following</p></div>
+                <div>
+                  <p className="font-semibold">{(live?.mediaCount ?? 0) + items.length}</p>
+                  <p className="text-neutral-500">posts</p>
+                </div>
+                <div>
+                  <p className="font-semibold">{live?.followers !== undefined ? compact(live.followers) : '—'}</p>
+                  <p className="text-neutral-500">followers</p>
+                </div>
+                <div>
+                  <p className="font-semibold">{live?.following !== undefined ? compact(live.following) : '—'}</p>
+                  <p className="text-neutral-500">following</p>
+                </div>
               </div>
             </div>
             <div className="px-4 pb-3">
@@ -186,8 +220,9 @@ export default function MerchantProfile() {
               {merchant.bio && <p className="text-[13px] text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap">{merchant.bio}</p>}
               {merchant.location && <p className="text-[13px] text-neutral-500">{merchant.location}</p>}
             </div>
-            {/* grid */}
-            {items.length === 0 ? (
+            {/* grid: planned posts first (coral dot), then the account's real
+                published posts — how the feed will look once the plan ships */}
+            {items.length === 0 && (live?.posts.length ?? 0) === 0 ? (
               <p className="flex-1 grid place-items-center text-center text-[13px] text-neutral-500 px-6">
                 No posts planned yet — add approved photos from the tray.
               </p>
@@ -209,9 +244,33 @@ export default function MerchantProfile() {
                     aria-label={item.title ?? 'Planned post'}
                   >
                     <img src={item.thumbUrl} alt="" className="absolute inset-0 size-full object-cover" draggable={false} />
+                    <span className="absolute top-1.5 right-1.5 size-2.5 rounded-full nv-gradient ring-2 ring-white/80" title="Planned — not posted yet" />
                   </button>
                 ))}
+                {live?.posts.map((p) => (
+                  <a
+                    key={p.id}
+                    href={p.permalink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={clsx(
+                      'relative overflow-hidden bg-neutral-200',
+                      ratio === '1:1' ? 'aspect-square' : 'aspect-[3/4]',
+                      !p.permalink && 'pointer-events-none',
+                    )}
+                    aria-label="Published Instagram post"
+                  >
+                    <img src={p.thumbUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+                  </a>
+                ))}
               </div>
+            )}
+            {live && (
+              <p className="text-center text-[11px] text-neutral-400 py-2">
+                Live from @{live.username ?? handle}
+                {live.lastSyncedAt && <> · synced {timeAgo(live.lastSyncedAt)}</>}
+                {items.length > 0 && <> · <span className="text-neutral-500">• = planned</span></>}
+              </p>
             )}
             <div className="mt-auto h-8" />
           </div>
