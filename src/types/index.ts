@@ -98,8 +98,10 @@ export interface FeedLive {
   mediaCount?: number
   avatarUrl?: string
   bio?: string
+  name?: string
+  website?: string
   lastSyncedAt?: string
-  posts: { id: string; thumbUrl: string; permalink?: string; postedAt?: string }[]
+  posts: { id: string; thumbUrl: string; permalink?: string; postedAt?: string; mediaType?: string; tagged?: boolean }[]
 }
 
 export interface Project {

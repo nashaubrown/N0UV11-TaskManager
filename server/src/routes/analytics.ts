@@ -200,7 +200,7 @@ analyticsRouter.get('/:merchantId', async (req, res) => {
       orderBy: { day: 'asc' },
     }),
     prisma.social_posts.findMany({
-      where: { account_id: account.id },
+      where: { account_id: account.id, is_tagged: false },
       orderBy: { posted_at: 'desc' },
       take: 30,
     }),
