@@ -610,3 +610,29 @@ CREATE TABLE task_time_entries (
 );
 CREATE INDEX idx_time_entries_task ON task_time_entries (task_id);
 
+
+-- ---------- Photo boards (free-form 3xN grids) ----------
+-- Mirrors server/migrations/014_photo_boards.sql
+CREATE TABLE photo_boards (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  created_by      UUID REFERENCES users(id),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE photo_board_items (
+  board_id UUID NOT NULL REFERENCES photo_boards(id) ON DELETE CASCADE,
+  photo_id UUID NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (board_id, photo_id)
+);
+
+-- ---------- Task dependencies ----------
+-- Mirrors server/migrations/015_task_dependencies.sql
+CREATE TABLE task_dependencies (
+  task_id            UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  depends_on_task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, depends_on_task_id),
+  CHECK (task_id <> depends_on_task_id)
+);

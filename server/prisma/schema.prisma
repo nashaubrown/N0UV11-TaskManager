@@ -245,6 +245,7 @@ model organizations {
   member_permission_overrides member_permission_overrides[]
   merchants                   merchants[]
   organization_members        organization_members[]
+  photo_boards                photo_boards[]
   photos                      photos[]
   photoshoots                 photoshoots[]
   projects                    projects[]
@@ -327,6 +328,7 @@ model photos {
   deal_photos                              deal_photos[]
   feed_plan_items                          feed_plan_items[]
   photo_ai_metadata                        photo_ai_metadata?
+  photo_board_items                        photo_board_items[]
   photo_tags                               photo_tags[]
   photo_versions                           photo_versions[]
   merchants                                merchants?          @relation(fields: [merchant_id], references: [id], onUpdate: NoAction)
@@ -413,40 +415,42 @@ model task_labels {
 }
 
 model tasks {
-  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id      String                 @db.Uuid
-  project_id           String?                @db.Uuid
-  parent_task_id       String?                @db.Uuid
-  title                String
-  description          String?
-  status               task_status            @default(todo)
-  priority             task_priority          @default(medium)
-  due_at               DateTime?              @db.Timestamptz(6)
-  completed_at         DateTime?              @db.Timestamptz(6)
-  position             Int                    @default(0)
-  created_by           String?                @db.Uuid
-  created_at           DateTime               @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
-  gcal_event_id        String?
-  gcal_synced_at       DateTime?              @db.Timestamptz(6)
-  list_id              String?                @db.Uuid
-  starts_at            DateTime?              @db.Timestamptz(6)
-  estimate_minutes     Int?
-  comments             comments[]
-  deal_tasks           deal_tasks[]
-  gcal_sync_queue      gcal_sync_queue[]
-  task_assignees       task_assignees[]
-  task_attachments     task_attachments[]
-  task_checklist_items task_checklist_items[]
-  task_field_values    task_field_values[]
-  task_label_links     task_label_links[]
-  task_time_entries    task_time_entries[]
-  users                users?                 @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  task_lists           task_lists?            @relation(fields: [list_id], references: [id], onUpdate: NoAction)
-  organizations        organizations          @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  tasks                tasks?                 @relation("tasksTotasks", fields: [parent_task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  other_tasks          tasks[]                @relation("tasksTotasks")
-  projects             projects?              @relation(fields: [project_id], references: [id], onUpdate: NoAction)
+  id                                                            String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                               String                 @db.Uuid
+  project_id                                                    String?                @db.Uuid
+  parent_task_id                                                String?                @db.Uuid
+  title                                                         String
+  description                                                   String?
+  status                                                        task_status            @default(todo)
+  priority                                                      task_priority          @default(medium)
+  due_at                                                        DateTime?              @db.Timestamptz(6)
+  completed_at                                                  DateTime?              @db.Timestamptz(6)
+  position                                                      Int                    @default(0)
+  created_by                                                    String?                @db.Uuid
+  created_at                                                    DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at                                                    DateTime               @default(now()) @db.Timestamptz(6)
+  gcal_event_id                                                 String?
+  gcal_synced_at                                                DateTime?              @db.Timestamptz(6)
+  list_id                                                       String?                @db.Uuid
+  starts_at                                                     DateTime?              @db.Timestamptz(6)
+  estimate_minutes                                              Int?
+  comments                                                      comments[]
+  deal_tasks                                                    deal_tasks[]
+  gcal_sync_queue                                               gcal_sync_queue[]
+  task_assignees                                                task_assignees[]
+  task_attachments                                              task_attachments[]
+  task_checklist_items                                          task_checklist_items[]
+  task_dependencies_task_dependencies_depends_on_task_idTotasks task_dependencies[]    @relation("task_dependencies_depends_on_task_idTotasks")
+  task_dependencies_task_dependencies_task_idTotasks            task_dependencies[]    @relation("task_dependencies_task_idTotasks")
+  task_field_values                                             task_field_values[]
+  task_label_links                                              task_label_links[]
+  task_time_entries                                             task_time_entries[]
+  users                                                         users?                 @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  task_lists                                                    task_lists?            @relation(fields: [list_id], references: [id], onUpdate: NoAction)
+  organizations                                                 organizations          @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks                                                         tasks?                 @relation("tasksTotasks", fields: [parent_task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_tasks                                                   tasks[]                @relation("tasksTotasks")
+  projects                                                      projects?              @relation(fields: [project_id], references: [id], onUpdate: NoAction)
 
   @@index([parent_task_id], map: "idx_tasks_parent")
   @@index([project_id], map: "idx_tasks_project")
@@ -495,6 +499,7 @@ model users {
   notifications                                               notifications[]
   organization_members_organization_members_invited_byTousers organization_members[]        @relation("organization_members_invited_byTousers")
   organization_members_organization_members_user_idTousers    organization_members[]        @relation("organization_members_user_idTousers")
+  photo_boards                                                photo_boards[]
   photo_tags                                                  photo_tags[]
   photo_versions                                              photo_versions[]
   photos                                                      photos[]
@@ -745,6 +750,37 @@ model task_time_entries {
   users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([task_id], map: "idx_time_entries_task")
+}
+
+model photo_board_items {
+  board_id     String       @db.Uuid
+  photo_id     String       @db.Uuid
+  position     Int          @default(0)
+  photo_boards photo_boards @relation(fields: [board_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  photos       photos       @relation(fields: [photo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([board_id, photo_id])
+}
+
+model photo_boards {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id   String              @db.Uuid
+  name              String
+  created_by        String?             @db.Uuid
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  photo_board_items photo_board_items[]
+  users             users?              @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organizations     organizations       @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model task_dependencies {
+  task_id                                           String @db.Uuid
+  depends_on_task_id                                String @db.Uuid
+  tasks_task_dependencies_depends_on_task_idTotasks tasks  @relation("task_dependencies_depends_on_task_idTotasks", fields: [depends_on_task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks_task_dependencies_task_idTotasks            tasks  @relation("task_dependencies_task_idTotasks", fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([task_id, depends_on_task_id])
 }
 
 enum ai_tag_status {

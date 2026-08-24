@@ -26,6 +26,7 @@ const taskInclude = {
   task_checklist_items: true,
   task_attachments: true,
   task_time_entries: true,
+  task_dependencies_task_dependencies_task_idTotasks: true,
   _count: { select: { comments: true, other_tasks: true } },
 } satisfies Prisma.tasksInclude
 
@@ -223,6 +224,26 @@ tasksRouter.post('/:id/attachments', requireCapability('tasks.manage'), validate
 tasksRouter.delete('/:id/attachments/:photoId', requireCapability('tasks.manage'), async (req, res) => {
   const t = await loadTask(req.auth!.organizationId, param(req, 'id'))
   await prisma.task_attachments.deleteMany({ where: { task_id: t.id, photo_id: param(req, 'photoId') } })
+  res.json(await touched(req.auth!.organizationId, t.id))
+})
+
+/** POST /tasks/:id/dependencies — this task waits on another. */
+tasksRouter.post('/:id/dependencies', requireCapability('tasks.manage'), validate(z.object({ dependsOnTaskId: z.string().uuid() })), async (req, res) => {
+  const t = await loadTask(req.auth!.organizationId, param(req, 'id'))
+  const other = await loadTask(req.auth!.organizationId, req.body.dependsOnTaskId)
+  if (other.id === t.id) throw notFound('Task')
+  await prisma.task_dependencies.upsert({
+    where: { task_id_depends_on_task_id: { task_id: t.id, depends_on_task_id: other.id } },
+    create: { task_id: t.id, depends_on_task_id: other.id },
+    update: {},
+  })
+  res.status(201).json(await touched(req.auth!.organizationId, t.id))
+})
+
+/** DELETE /tasks/:id/dependencies/:depId */
+tasksRouter.delete('/:id/dependencies/:depId', requireCapability('tasks.manage'), async (req, res) => {
+  const t = await loadTask(req.auth!.organizationId, param(req, 'id'))
+  await prisma.task_dependencies.deleteMany({ where: { task_id: t.id, depends_on_task_id: param(req, 'depId') } })
   res.json(await touched(req.auth!.organizationId, t.id))
 })
 

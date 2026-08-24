@@ -6,11 +6,13 @@ import { APPROVAL_STATUS_META } from '../../types'
 import { Badge } from '../common/Badge'
 import { useData } from '../../store/data'
 
-export function PhotoCard({ photo, selected, onOpen, onToggleSelect }: {
+export function PhotoCard({ photo, selected, onOpen, onToggleSelect, onDragStartPhoto, onDragEndPhoto }: {
   photo: Photo
   selected?: boolean
   onOpen?: (photo: Photo) => void
   onToggleSelect?: (id: string) => void
+  onDragStartPhoto?: (id: string) => void
+  onDragEndPhoto?: () => void
 }) {
   const approval = photo.approvalStatus ? APPROVAL_STATUS_META[photo.approvalStatus] : null
   const aiSuggested = photo.tags.some((t) => t.source === 'ai' && t.aiStatus === 'suggested')
@@ -25,6 +27,9 @@ export function PhotoCard({ photo, selected, onOpen, onToggleSelect }: {
       )}
       whileHover={{ y: -2 }}
       onClick={() => onOpen?.(photo)}
+      draggable={Boolean(onDragStartPhoto)}
+      onDragStart={onDragStartPhoto ? () => onDragStartPhoto(photo.id) : undefined}
+      onDragEnd={onDragEndPhoto}
     >
       <div className="aspect-[4/3] w-full overflow-hidden">
         <img

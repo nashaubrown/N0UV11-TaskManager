@@ -34,6 +34,7 @@ export const sTask = (t: any) => ({
     .sort((a: any, b: any) => a.position - b.position)
     .map((c: any) => ({ id: c.id, label: c.label, done: c.done })),
   attachmentIds: (t.task_attachments ?? []).map((a: any) => a.photo_id),
+  dependsOnIds: (t.task_dependencies_task_dependencies_task_idTotasks ?? []).map((d: any) => d.depends_on_task_id),
   trackedSeconds: (t.task_time_entries ?? []).reduce((s: number, e: any) => s + (e.seconds ?? 0), 0),
   runningEntry: (() => {
     const open = (t.task_time_entries ?? []).find((e: any) => !e.ended_at)

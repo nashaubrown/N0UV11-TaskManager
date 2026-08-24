@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, Check, Clock, Flag, ListChecks, Paperclip, Pause, Play, Tag, Trash2, UserRound, X } from 'lucide-react'
+import {
+  CalendarDays, Check, ChevronDown, Clock, Flag, GitBranch, ListChecks, ListTree, Paperclip, Pause, Play,
+  Tag, Trash2, UserRound, X,
+} from 'lucide-react'
 import clsx from 'clsx'
 import { Avatar } from '../common/Avatar'
 import { Badge } from '../common/Badge'
 import { Button } from '../common/Button'
 import { CommentThread } from '../common/CommentThread'
 import { Select } from '../common/Input'
+import { api, DEMO } from '../../services/api'
 import { useData } from '../../store/data'
 import { useAuth } from '../../store/auth'
-import { TASK_PRIORITY_META, TASK_STATUS_META, type TaskPriority, type TaskStatus } from '../../types'
+import { TASK_PRIORITY_META, TASK_STATUS_META, type Task, type TaskPriority, type TaskStatus } from '../../types'
 
-/* Docked ClickUp-style task panel: every field inline-editable, saves as
- * you go. Opens on the right of the workspace. */
+/* Docked ClickUp-style task panel: label/value rows with "Empty"
+ * placeholders, collapsible Fields, subtasks, dependencies, checklist,
+ * attachments and comments. Everything saves as you go. */
 
 const toLocal = (iso?: string) => {
   if (!iso) return ''
@@ -29,7 +34,7 @@ export const fmtDuration = (secs: number) => {
 
 function Row({ icon: Icon, label, children }: { icon: React.ComponentType<{ className?: string }>; label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[130px_1fr] items-center gap-2 min-h-9">
+    <div className="grid grid-cols-[128px_1fr] items-center gap-2 min-h-9">
       <span className="inline-flex items-center gap-2 text-sm text-ink-muted">
         <Icon className="size-4" aria-hidden /> {label}
       </span>
@@ -38,33 +43,59 @@ function Row({ icon: Icon, label, children }: { icon: React.ComponentType<{ clas
   )
 }
 
+const Empty = ({ onClick, label }: { onClick?: () => void; label?: string }) => (
+  <button onClick={onClick} className="text-sm text-ink-faint hover:text-ink-muted text-left" disabled={!onClick}>
+    {label ?? 'Empty'}
+  </button>
+)
+
+function ActionRow({ icon: Icon, label, onClick }: { icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-ink-2 hover:bg-surface-2 text-left border-t border-border first:border-t-0">
+      <Icon className="size-4 text-ink-muted" aria-hidden /> {label}
+    </button>
+  )
+}
+
 export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose: () => void }) {
-  const { tasks, lists, members, photos, comments, updateTask, deleteTask, taskChecklist, taskAttachment, taskTimer, addComment, loadComments } = useData()
+  const {
+    tasks, lists, members, photos, comments,
+    addTask, updateTask, deleteTask, taskChecklist, taskAttachment, taskTimer, taskDependency, addComment, loadComments,
+  } = useData()
   const { user } = useAuth()
   const task = tasks.find((t) => t.id === taskId)
   const list = lists.find((l) => l.id === task?.listId)
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [fieldsOpen, setFieldsOpen] = useState(true)
+  const [subtasks, setSubtasks] = useState<Task[]>([])
+  const [subtaskDraft, setSubtaskDraft] = useState('')
+  const [addingSubtask, setAddingSubtask] = useState(false)
+  const [depPicking, setDepPicking] = useState(false)
+  const [checkOpen, setCheckOpen] = useState(false)
   const [checkDraft, setCheckDraft] = useState('')
   const [picking, setPicking] = useState(false)
   const [pickQuery, setPickQuery] = useState('')
   const [assigneesOpen, setAssigneesOpen] = useState(false)
+  const [estimateOpen, setEstimateOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [, tick] = useState(0)
   const fieldDrafts = useRef<Record<string, string>>({})
 
   useEffect(() => {
-    if (!task) return
+    if (!task || !taskId) return
     setTitle(task.title)
     setDescription(task.description ?? '')
     fieldDrafts.current = Object.fromEntries((task.fieldValues ?? []).map((v) => [v.fieldId, v.value]))
-    setConfirmDelete(false)
-    if (taskId) void loadComments({ taskId })
+    setConfirmDelete(false); setAddingSubtask(false); setDepPicking(false); setCheckOpen(false); setPicking(false); setEstimateOpen(false)
+    void loadComments({ taskId })
+    if (DEMO) setSubtasks(tasks.filter((t) => t.parentTaskId === taskId))
+    else api<Task & { subtasks: Task[] }>('GET', `/tasks/${taskId}`).then((d) => setSubtasks(d.subtasks)).catch(() => setSubtasks([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId])
 
-  // live timer readout
   useEffect(() => {
     if (!task?.runningEntry) return
     const id = setInterval(() => tick((n) => n + 1), 1000)
@@ -80,6 +111,14 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
     const q = pickQuery.trim().toLowerCase()
     return photos.filter((p) => p.status === 'ready' && (!q || (p.title ?? '').toLowerCase().includes(q))).slice(0, 60)
   }, [photos, pickQuery])
+  const depOptions = useMemo(
+    () => tasks.filter((t) => t.listId === task?.listId && t.id !== taskId && !t.parentTaskId && !(task?.dependsOnIds ?? []).includes(t.id)),
+    [tasks, task, taskId],
+  )
+  const dependsOn = useMemo(
+    () => (task?.dependsOnIds ?? []).map((id) => tasks.find((t) => t.id === id)).filter((t): t is Task => Boolean(t)),
+    [task?.dependsOnIds, tasks],
+  )
 
   if (!task) return null
 
@@ -94,6 +133,19 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
   const toggleAssignee = (id: string) => {
     const cur = task.assignees.map((a) => a.id)
     void updateTask(task.id, { assigneeIds: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] })
+  }
+
+  const addSubtask = async () => {
+    if (!subtaskDraft.trim()) return
+    const created = await addTask({ title: subtaskDraft.trim(), status: 'todo', priority: 'medium', listId: task.listId, parentTaskId: task.id })
+    setSubtasks((s) => [...s, created])
+    setSubtaskDraft('')
+  }
+
+  const toggleSubtask = async (sub: Task) => {
+    const status: TaskStatus = sub.status === 'completed' ? 'todo' : 'completed'
+    await updateTask(sub.id, { status })
+    setSubtasks((s) => s.map((x) => (x.id === sub.id ? { ...x, status } : x)))
   }
 
   return (
@@ -122,7 +174,8 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
           aria-label="Task title"
         />
 
-        <div className="grid gap-1">
+        {/* property rows — ClickUp order */}
+        <div className="grid gap-0.5">
           <Row icon={Check} label="Status">
             <Select value={task.status} onChange={(e) => void updateTask(task.id, { status: e.target.value as TaskStatus })} aria-label="Status">
               {(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => (
@@ -132,13 +185,17 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
           </Row>
 
           <Row icon={UserRound} label="Assignees">
-            <div className="flex items-center gap-1 flex-wrap">
-              {task.assignees.map((a) => <Avatar key={a.id} user={a} size="xs" />)}
-              <button onClick={() => setAssigneesOpen((o) => !o)}
-                      className="size-6 rounded-full border border-dashed border-border text-ink-faint text-sm hover:text-ink hover:border-ink-faint">
-                +
-              </button>
-            </div>
+            {task.assignees.length === 0 && !assigneesOpen ? (
+              <Empty onClick={() => setAssigneesOpen(true)} />
+            ) : (
+              <div className="flex items-center gap-1 flex-wrap">
+                {task.assignees.map((a) => <Avatar key={a.id} user={a} size="xs" />)}
+                <button onClick={() => setAssigneesOpen((o) => !o)} aria-label="Edit assignees"
+                        className="size-6 rounded-full border border-dashed border-border text-ink-faint text-sm hover:text-ink hover:border-ink-faint">
+                  +
+                </button>
+              </div>
+            )}
             {assigneesOpen && (
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {members.map((m) => {
@@ -175,18 +232,25 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
           </Row>
 
           <Row icon={Clock} label="Time estimate">
-            <input
-              type="number" min={0} placeholder="minutes"
-              defaultValue={task.estimateMinutes ?? ''}
-              key={`est-${task.id}`}
-              onBlur={(e) => {
-                const v = e.target.value === '' ? null : Math.max(0, Number(e.target.value))
-                if (v !== (task.estimateMinutes ?? null)) void updateTask(task.id, { estimateMinutes: v })
-              }}
-              aria-label="Time estimate in minutes"
-              className="h-8 w-28 rounded-(--nv-radius-sm) border border-border bg-surface text-ink px-2 text-sm"
-            />
-            {task.estimateMinutes ? <span className="ml-2 text-xs text-ink-muted">{fmtDuration(task.estimateMinutes * 60)}</span> : null}
+            {task.estimateMinutes === undefined && !estimateOpen ? (
+              <Empty onClick={() => setEstimateOpen(true)} />
+            ) : (
+              <span className="inline-flex items-center gap-2">
+                <input
+                  type="number" min={0} placeholder="minutes" autoFocus={estimateOpen}
+                  defaultValue={task.estimateMinutes ?? ''}
+                  key={`est-${task.id}`}
+                  onBlur={(e) => {
+                    const v = e.target.value === '' ? null : Math.max(0, Number(e.target.value))
+                    if (v !== (task.estimateMinutes ?? null)) void updateTask(task.id, { estimateMinutes: v })
+                    if (v === null) setEstimateOpen(false)
+                  }}
+                  aria-label="Time estimate in minutes"
+                  className="h-8 w-24 rounded-(--nv-radius-sm) border border-border bg-surface text-ink px-2 text-sm"
+                />
+                {task.estimateMinutes ? <span className="text-xs text-ink-muted">{fmtDuration(task.estimateMinutes * 60)}</span> : null}
+              </span>
+            )}
           </Row>
 
           <Row icon={Clock} label="Track time">
@@ -200,15 +264,19 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
                   Start
                 </Button>
               )}
-              <span className="text-sm tabular-nums text-ink-2">
-                {fmtDuration((task.trackedSeconds ?? 0) + (task.runningEntry ? runningSecs : 0))}
-                {task.runningEntry && !mine && <span className="text-xs text-ink-muted"> · running</span>}
-              </span>
+              {(task.trackedSeconds ?? 0) + runningSecs > 0 ? (
+                <span className="text-sm tabular-nums text-ink-2">
+                  {fmtDuration((task.trackedSeconds ?? 0) + (task.runningEntry ? runningSecs : 0))}
+                  {task.runningEntry && !mine && <span className="text-xs text-ink-muted"> · running</span>}
+                </span>
+              ) : null}
             </div>
           </Row>
 
-          {task.labels.length > 0 && (
-            <Row icon={Tag} label="Tags">
+          <Row icon={Tag} label="Tags">
+            {task.labels.length === 0 ? (
+              <Empty />
+            ) : (
               <div className="flex gap-1 flex-wrap">
                 {task.labels.map((l) => (
                   <span key={l.id} className="text-xs font-medium rounded-full px-2 py-0.5 text-white" style={{ backgroundColor: l.color }}>
@@ -216,8 +284,8 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
                   </span>
                 ))}
               </div>
-            </Row>
-          )}
+            )}
+          </Row>
         </div>
 
         <textarea
@@ -230,13 +298,15 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
           aria-label="Description"
         />
 
-        {/* custom fields */}
+        {/* collapsible Fields */}
         {(list?.fields.length ?? 0) > 0 && (
           <div className="grid gap-1.5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Fields</p>
-            {list!.fields.map((f) => (
-              <div key={f.id} className="grid grid-cols-[130px_1fr] items-center gap-2">
-                <span className="text-sm text-ink-muted truncate">{f.name}</span>
+            <button onClick={() => setFieldsOpen((o) => !o)} className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink">
+              <ChevronDown className={clsx('size-3.5 transition-transform', !fieldsOpen && '-rotate-90')} aria-hidden /> Fields
+            </button>
+            {fieldsOpen && list!.fields.map((f) => (
+              <div key={f.id} className="grid grid-cols-[128px_1fr] items-center gap-2 border-b border-border/60 pb-1">
+                <span className="text-sm text-ink-muted truncate pl-5">{f.name}</span>
                 <input
                   key={`${task.id}-${f.id}`}
                   defaultValue={fieldDrafts.current[f.id] ?? ''}
@@ -244,75 +314,134 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
                   onBlur={saveFields}
                   placeholder="—"
                   aria-label={f.name}
-                  className="h-8 rounded-(--nv-radius-sm) border border-border bg-surface text-ink px-2 text-sm"
+                  className="h-8 rounded-(--nv-radius-sm) bg-transparent text-ink px-2 text-sm placeholder:text-ink-faint focus:bg-surface focus:border focus:border-border focus:outline-none"
                 />
               </div>
             ))}
           </div>
         )}
 
-        {/* checklist */}
-        <div className="grid gap-1.5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted inline-flex items-center gap-1.5">
-            <ListChecks className="size-3.5" aria-hidden /> Checklist
-          </p>
-          {(task.checklist ?? []).map((c) => (
-            <div key={c.id} className="flex items-center gap-2 group">
-              <input type="checkbox" checked={c.done} onChange={() => void taskChecklist(task.id, { toggle: c.id })}
-                     className="accent-(--nv-coral) size-4" aria-label={c.label} />
-              <span className={clsx('text-sm flex-1', c.done ? 'line-through text-ink-faint' : 'text-ink-2')}>{c.label}</span>
-              <button onClick={() => void taskChecklist(task.id, { remove: c.id })} aria-label={`Remove ${c.label}`}
-                      className="opacity-0 group-hover:opacity-100 text-ink-faint hover:text-error text-xs">✕</button>
-            </div>
-          ))}
-          <form
-            onSubmit={(e) => { e.preventDefault(); if (checkDraft.trim()) { void taskChecklist(task.id, { add: checkDraft.trim() }); setCheckDraft('') } }}
-            className="flex gap-1.5"
-          >
-            <input value={checkDraft} onChange={(e) => setCheckDraft(e.target.value)} placeholder="Add checklist item…"
-                   aria-label="Add checklist item"
-                   className="h-8 flex-1 rounded-(--nv-radius-sm) border border-border bg-surface text-ink px-2 text-sm placeholder:text-ink-faint focus:border-brand focus:outline-none" />
-            <Button type="submit" size="sm" variant="secondary" disabled={!checkDraft.trim()}>Add</Button>
-          </form>
-        </div>
-
-        {/* attachments */}
-        <div className="grid gap-1.5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted inline-flex items-center gap-1.5">
-            <Paperclip className="size-3.5" aria-hidden /> Attachments
-          </p>
-          <div className="flex gap-1.5 flex-wrap">
-            {attachments.map((p) => (
-              <div key={p.id} className="relative size-16 rounded-(--nv-radius-sm) overflow-hidden group">
-                <img src={p.thumbUrl} alt={p.title ?? 'Attachment'} className="size-full object-cover" />
-                <button onClick={() => void taskAttachment(task.id, { remove: p.id })} aria-label="Remove attachment"
-                        className="absolute top-0.5 right-0.5 size-4 rounded-full bg-black/60 text-white text-[10px] hidden group-hover:flex items-center justify-center">✕</button>
+        {/* subtasks */}
+        {(subtasks.length > 0 || addingSubtask) && (
+          <div className="grid gap-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted inline-flex items-center gap-1.5">
+              <ListTree className="size-3.5" aria-hidden /> Subtasks
+            </p>
+            {subtasks.map((s) => (
+              <div key={s.id} className="flex items-center gap-2">
+                <input type="checkbox" checked={s.status === 'completed'} onChange={() => void toggleSubtask(s)}
+                       className="accent-(--nv-coral) size-4" aria-label={s.title} />
+                <span className={clsx('text-sm flex-1', s.status === 'completed' ? 'line-through text-ink-faint' : 'text-ink-2')}>{s.title}</span>
               </div>
             ))}
-            <button onClick={() => setPicking(true)} aria-label="Attach a photo"
-                    className="size-16 rounded-(--nv-radius-sm) border border-dashed border-border text-ink-faint hover:text-ink hover:border-ink-faint flex items-center justify-center">
-              <Paperclip className="size-4" aria-hidden />
-            </button>
+            {addingSubtask && (
+              <form onSubmit={(e) => { e.preventDefault(); void addSubtask() }}>
+                <input autoFocus value={subtaskDraft} onChange={(e) => setSubtaskDraft(e.target.value)}
+                       placeholder="Subtask name — Enter to add" aria-label="New subtask"
+                       className="w-full h-8 rounded-(--nv-radius-sm) border border-border bg-surface text-ink px-2 text-sm placeholder:text-ink-faint focus:border-brand focus:outline-none" />
+              </form>
+            )}
           </div>
-          {picking && (
-            <div className="border border-border rounded-(--nv-radius-md) p-2.5 grid gap-2 bg-surface-2/50">
-              <div className="flex gap-2">
-                <input value={pickQuery} onChange={(e) => setPickQuery(e.target.value)} placeholder="Search the photo library…"
-                       aria-label="Search photos to attach" autoFocus
-                       className="h-8 flex-1 rounded-(--nv-radius-sm) border border-border bg-surface text-ink px-2 text-sm placeholder:text-ink-faint focus:border-brand focus:outline-none" />
-                <Button size="sm" variant="ghost" onClick={() => setPicking(false)}>Done</Button>
+        )}
+
+        {/* dependencies */}
+        {(dependsOn.length > 0 || depPicking) && (
+          <div className="grid gap-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted inline-flex items-center gap-1.5">
+              <GitBranch className="size-3.5" aria-hidden /> Waiting on
+            </p>
+            {dependsOn.map((d) => (
+              <div key={d.id} className="flex items-center gap-2 group">
+                <Badge tone={TASK_STATUS_META[d.status].tone}>{TASK_STATUS_META[d.status].label}</Badge>
+                <span className="text-sm text-ink-2 flex-1 truncate">{d.title}</span>
+                <button onClick={() => void taskDependency(task.id, { remove: d.id })} aria-label={`Remove dependency ${d.title}`}
+                        className="opacity-0 group-hover:opacity-100 text-ink-faint hover:text-error text-xs">✕</button>
               </div>
-              <div className="grid grid-cols-5 gap-1 max-h-40 overflow-y-auto">
-                {pickerPhotos.map((p) => (
-                  <button key={p.id} onClick={() => void taskAttachment(task.id, { add: p.id })}
-                          className={clsx('relative aspect-square rounded-(--nv-radius-sm) overflow-hidden', task.attachmentIds?.includes(p.id) && 'opacity-40')}
-                          aria-label={`Attach ${p.title ?? 'photo'}`}>
-                    <img src={p.thumbUrl} alt="" className="absolute inset-0 size-full object-cover" />
-                  </button>
-                ))}
+            ))}
+            {depPicking && (
+              depOptions.length === 0 ? (
+                <p className="text-xs text-ink-muted">No other tasks in this list to depend on.</p>
+              ) : (
+                <Select aria-label="Add dependency" defaultValue=""
+                        onChange={(e) => { if (e.target.value) { void taskDependency(task.id, { add: e.target.value }); setDepPicking(false) } }}>
+                  <option value="" disabled>Waits on…</option>
+                  {depOptions.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+                </Select>
+              )
+            )}
+          </div>
+        )}
+
+        {/* checklist */}
+        {((task.checklist?.length ?? 0) > 0 || checkOpen) && (
+          <div className="grid gap-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted inline-flex items-center gap-1.5">
+              <ListChecks className="size-3.5" aria-hidden /> Checklist
+            </p>
+            {(task.checklist ?? []).map((c) => (
+              <div key={c.id} className="flex items-center gap-2 group">
+                <input type="checkbox" checked={c.done} onChange={() => void taskChecklist(task.id, { toggle: c.id })}
+                       className="accent-(--nv-coral) size-4" aria-label={c.label} />
+                <span className={clsx('text-sm flex-1', c.done ? 'line-through text-ink-faint' : 'text-ink-2')}>{c.label}</span>
+                <button onClick={() => void taskChecklist(task.id, { remove: c.id })} aria-label={`Remove ${c.label}`}
+                        className="opacity-0 group-hover:opacity-100 text-ink-faint hover:text-error text-xs">✕</button>
               </div>
+            ))}
+            <form
+              onSubmit={(e) => { e.preventDefault(); if (checkDraft.trim()) { void taskChecklist(task.id, { add: checkDraft.trim() }); setCheckDraft('') } }}
+              className="flex gap-1.5"
+            >
+              <input value={checkDraft} onChange={(e) => setCheckDraft(e.target.value)} placeholder="Add checklist item…"
+                     aria-label="Add checklist item" autoFocus={checkOpen}
+                     className="h-8 flex-1 rounded-(--nv-radius-sm) border border-border bg-surface text-ink px-2 text-sm placeholder:text-ink-faint focus:border-brand focus:outline-none" />
+              <Button type="submit" size="sm" variant="secondary" disabled={!checkDraft.trim()}>Add</Button>
+            </form>
+          </div>
+        )}
+
+        {/* attachments */}
+        {(attachments.length > 0 || picking) && (
+          <div className="grid gap-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted inline-flex items-center gap-1.5">
+              <Paperclip className="size-3.5" aria-hidden /> Attachments
+            </p>
+            <div className="flex gap-1.5 flex-wrap">
+              {attachments.map((p) => (
+                <div key={p.id} className="relative size-16 rounded-(--nv-radius-sm) overflow-hidden group">
+                  <img src={p.thumbUrl} alt={p.title ?? 'Attachment'} className="size-full object-cover" />
+                  <button onClick={() => void taskAttachment(task.id, { remove: p.id })} aria-label="Remove attachment"
+                          className="absolute top-0.5 right-0.5 size-4 rounded-full bg-black/60 text-white text-[10px] hidden group-hover:flex items-center justify-center">✕</button>
+                </div>
+              ))}
             </div>
-          )}
+            {picking && (
+              <div className="border border-border rounded-(--nv-radius-md) p-2.5 grid gap-2 bg-surface-2/50">
+                <div className="flex gap-2">
+                  <input value={pickQuery} onChange={(e) => setPickQuery(e.target.value)} placeholder="Search the photo library…"
+                         aria-label="Search photos to attach" autoFocus
+                         className="h-8 flex-1 rounded-(--nv-radius-sm) border border-border bg-surface text-ink px-2 text-sm placeholder:text-ink-faint focus:border-brand focus:outline-none" />
+                  <Button size="sm" variant="ghost" onClick={() => setPicking(false)}>Done</Button>
+                </div>
+                <div className="grid grid-cols-5 gap-1 max-h-40 overflow-y-auto">
+                  {pickerPhotos.map((p) => (
+                    <button key={p.id} onClick={() => void taskAttachment(task.id, { add: p.id })}
+                            className={clsx('relative aspect-square rounded-(--nv-radius-sm) overflow-hidden', task.attachmentIds?.includes(p.id) && 'opacity-40')}
+                            aria-label={`Attach ${p.title ?? 'photo'}`}>
+                      <img src={p.thumbUrl} alt="" className="absolute inset-0 size-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* action rows — like ClickUp's footer actions */}
+        <div className="rounded-(--nv-radius-md) border border-border overflow-hidden">
+          <ActionRow icon={ListTree} label="Add subtask" onClick={() => setAddingSubtask(true)} />
+          <ActionRow icon={GitBranch} label="Relate items or add dependencies" onClick={() => setDepPicking(true)} />
+          <ActionRow icon={ListChecks} label="Create checklist" onClick={() => setCheckOpen(true)} />
+          <ActionRow icon={Paperclip} label="Attach file" onClick={() => setPicking(true)} />
         </div>
 
         {/* comments */}

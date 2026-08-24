@@ -4,12 +4,14 @@ import { PhotoCard } from './PhotoCard'
 import { EmptyState } from '../common/EmptyState'
 import { useUi } from '../../store/ui'
 
-export function PhotoGallery({ photos, onOpen, selectable = true, large = false }: {
+export function PhotoGallery({ photos, onOpen, selectable = true, large = false, onDragStartPhoto, onDragEndPhoto }: {
   photos: Photo[]
   onOpen?: (photo: Photo) => void
   selectable?: boolean
   /** fewer columns → bigger tiles */
   large?: boolean
+  onDragStartPhoto?: (id: string) => void
+  onDragEndPhoto?: () => void
 }) {
   const { selectedPhotoIds, togglePhotoSelection } = useUi()
 
@@ -34,6 +36,8 @@ export function PhotoGallery({ photos, onOpen, selectable = true, large = false 
           selected={selectedPhotoIds.includes(p.id)}
           onOpen={onOpen}
           onToggleSelect={selectable ? togglePhotoSelection : undefined}
+          onDragStartPhoto={onDragStartPhoto}
+          onDragEndPhoto={onDragEndPhoto}
         />
       ))}
     </div>

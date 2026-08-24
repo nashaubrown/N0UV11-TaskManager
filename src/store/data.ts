@@ -61,6 +61,7 @@ export interface NewTaskInput {
   dueAt?: string
   projectId?: string
   listId?: string
+  parentTaskId?: string
   estimateMinutes?: number
 }
 
@@ -101,6 +102,7 @@ interface DataState {
   taskChecklist: (taskId: string, op: { add?: string; toggle?: string; remove?: string }) => Promise<void>
   taskAttachment: (taskId: string, op: { add?: string; remove?: string }) => Promise<void>
   taskTimer: (taskId: string, action: 'start' | 'stop') => Promise<void>
+  taskDependency: (taskId: string, op: { add?: string; remove?: string }) => Promise<void>
   addPhotos: (files: File[], opts?: { projectId?: string; merchantId?: string }) => Promise<void>
   addComment: (target: { taskId?: string; photoId?: string }, body: string) => Promise<void>
   addShoot: (input: NewShootInput) => Promise<Shoot>
@@ -381,6 +383,25 @@ export const useData = create<DataState>((set, get) => ({
       return
     }
     const task = await api<Task>('POST', `/tasks/${taskId}/time/${action}`)
+    set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? task : t)) }))
+  },
+
+  taskDependency: async (taskId, op) => {
+    if (DEMO) {
+      set((s) => ({
+        tasks: s.tasks.map((t) => {
+          if (t.id !== taskId) return t
+          let ids = t.dependsOnIds ?? []
+          if (op.add && !ids.includes(op.add)) ids = [...ids, op.add]
+          if (op.remove) ids = ids.filter((x) => x !== op.remove)
+          return { ...t, dependsOnIds: ids }
+        }),
+      }))
+      return
+    }
+    const task = op.add
+      ? await api<Task>('POST', `/tasks/${taskId}/dependencies`, { dependsOnTaskId: op.add })
+      : await api<Task>('DELETE', `/tasks/${taskId}/dependencies/${op.remove}`)
     set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? task : t)) }))
   },
 
