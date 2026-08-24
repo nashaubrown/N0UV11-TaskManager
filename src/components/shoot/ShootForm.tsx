@@ -19,7 +19,7 @@ export function ShootForm({ initial, defaultDate, onSubmit, onCancel }: {
   onSubmit: (values: NewShootInput) => void
   onCancel: () => void
 }) {
-  const { merchants, projects, members } = useData()
+  const { merchants, projects, members, lists } = useData()
   const base = defaultDate ?? new Date()
   const defaultStart = new Date(base); defaultStart.setHours(9, 0, 0, 0)
   const defaultEnd = new Date(base); defaultEnd.setHours(12, 0, 0, 0)
@@ -32,6 +32,7 @@ export function ShootForm({ initial, defaultDate, onSubmit, onCancel }: {
   const [startsAt, setStartsAt] = useState(toLocalInput(initial?.startsAt ?? defaultStart.toISOString()))
   const [endsAt, setEndsAt] = useState(toLocalInput(initial?.endsAt ?? defaultEnd.toISOString()))
   const [status, setStatus] = useState<Shoot['status']>(initial?.status ?? 'planning')
+  const [listId, setListId] = useState(initial?.listId ?? '')
   const [crewIds, setCrewIds] = useState<string[]>(initial?.crew.map((u) => u.id) ?? [])
   const [error, setError] = useState<string>()
 
@@ -51,9 +52,18 @@ export function ShootForm({ initial, defaultDate, onSubmit, onCancel }: {
       startsAt: new Date(startsAt).toISOString(),
       endsAt: new Date(endsAt).toISOString(),
       status,
+      // clearing an existing link sends null; a fresh shoot just omits it
+      listId: listId || (initial ? null : undefined),
       crewIds,
     })
   }
+
+  const listGroups = [
+    ...merchants
+      .map((m) => ({ label: m.name, lists: lists.filter((l) => l.merchantId === m.id) }))
+      .filter((g) => g.lists.length > 0),
+    ...(lists.some((l) => !l.merchantId) ? [{ label: 'Other lists', lists: lists.filter((l) => !l.merchantId) }] : []),
+  ]
 
   return (
     <form onSubmit={submit} className="grid gap-4">
@@ -77,6 +87,19 @@ export function ShootForm({ initial, defaultDate, onSubmit, onCancel }: {
           <option value="planning">Planning</option>
           <option value="confirmed">Confirmed</option>
         </Select>
+      </div>
+      <div>
+        <Select label="Task list (Projects)" value={listId} onChange={(e) => setListId(e.target.value)}>
+          <option value="">None</option>
+          {listGroups.map((g) => (
+            <optgroup key={g.label} label={g.label}>
+              {g.lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </optgroup>
+          ))}
+        </Select>
+        <p className="text-xs text-ink-muted mt-1.5">
+          Filing the shoot into a list creates a synced 📸 task there — it follows the shoot's title, dates and status, and the shoot shows on that list's Calendar and Gantt views.
+        </p>
       </div>
       <fieldset>
         <legend className="text-sm font-medium text-ink mb-1.5">Crew</legend>

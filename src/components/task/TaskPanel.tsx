@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  CalendarDays, Check, ChevronDown, Clock, Flag, GitBranch, ListChecks, ListTree, Paperclip, Pause, Play,
+  CalendarDays, Check, ChevronDown, Clock, Flag, GitBranch, ListChecks, ListTodo, ListTree, Paperclip, Pause, Play,
   Tag, Trash2, UserRound, X,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -60,7 +60,7 @@ function ActionRow({ icon: Icon, label, onClick }: { icon: React.ComponentType<{
 
 export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose: () => void }) {
   const {
-    tasks, lists, members, photos, comments,
+    tasks, lists, merchants, members, photos, comments,
     addTask, updateTask, deleteTask, taskChecklist, taskAttachment, taskTimer, taskDependency, addComment, loadComments,
   } = useData()
   const { user } = useAuth()
@@ -181,6 +181,16 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
               {(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => (
                 <option key={s} value={s}>{TASK_STATUS_META[s].label}</option>
               ))}
+            </Select>
+          </Row>
+
+          <Row icon={ListTodo} label="List">
+            <Select value={task.listId ?? ''} onChange={(e) => void updateTask(task.id, { listId: e.target.value || null })} aria-label="List">
+              <option value="">Unfiled</option>
+              {lists.map((l) => {
+                const m = merchants.find((mm) => mm.id === l.merchantId)
+                return <option key={l.id} value={l.id}>{m ? `${m.name} / ${l.name}` : l.name}</option>
+              })}
             </Select>
           </Row>
 

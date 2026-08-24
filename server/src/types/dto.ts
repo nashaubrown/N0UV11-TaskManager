@@ -42,6 +42,7 @@ export const createTaskDto = z.object({
   estimateMinutes: z.number().int().min(0).max(100_000).optional(),
 })
 export const updateTaskDto = createTaskDto.partial().extend({
+  listId: z.string().uuid().nullable().optional(),
   startsAt: z.string().datetime({ offset: true }).nullable().optional(),
   dueAt: z.string().datetime({ offset: true }).nullable().optional(),
   estimateMinutes: z.number().int().min(0).max(100_000).nullable().optional(),
@@ -134,6 +135,7 @@ export const createShootDto = z.object({
   status: shootStatus.default('planning'),
   projectId: z.string().uuid().optional(),
   merchantId: z.string().uuid().optional(),
+  listId: z.string().uuid().optional(),
   crewIds: z.array(z.string().uuid()).max(20).default([]),
 }).refine((v) => new Date(v.endsAt) > new Date(v.startsAt), {
   message: 'endsAt must be after startsAt',
@@ -148,6 +150,7 @@ export const updateShootDto = z.object({
   status: shootStatus.optional(),
   projectId: z.string().uuid().nullable().optional(),
   merchantId: z.string().uuid().nullable().optional(),
+  listId: z.string().uuid().nullable().optional(),
   crewIds: z.array(z.string().uuid()).max(20).optional(),
 })
 

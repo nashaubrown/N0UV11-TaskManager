@@ -154,6 +154,7 @@ export const sShoot = (sh: any) => ({
   startsAt: sh.starts_at,
   endsAt: sh.ends_at,
   status: sh.status,
+  listId: sh.list_id ?? undefined,
   crew: (sh.shoot_crew ?? []).map((c: any) => sUser(c.users)),
   gcalSynced: Boolean(sh.gcal_synced_at),
   createdAt: sh.created_at,

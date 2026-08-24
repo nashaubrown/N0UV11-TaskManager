@@ -19,7 +19,7 @@ import { createCommentDto } from '../types/dto.js'
 export const tasksRouter = Router()
 tasksRouter.use(requireAuth)
 
-const taskInclude = {
+export const taskInclude = {
   task_assignees: { include: { users: true } },
   task_label_links: { include: { task_labels: true } },
   task_field_values: true,
