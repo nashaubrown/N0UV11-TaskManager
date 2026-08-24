@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -80,7 +80,7 @@ export interface GridDrag {
   photoId: string
 }
 
-export function GridCanvas({ items, drag, setDrag, onPlace, onSwap, onRemove, onOpenItem, minRows = 3 }: {
+export function GridCanvas({ items, drag, setDrag, onPlace, onSwap, onRemove, onOpenItem, onPickCell, minRows = 3 }: {
   items: GridItem[]
   drag: GridDrag | null
   setDrag: (d: GridDrag | null) => void
@@ -88,10 +88,58 @@ export function GridCanvas({ items, drag, setDrag, onPlace, onSwap, onRemove, on
   onSwap: (aId: string, bId: string) => void
   onRemove: (photoId: string) => void
   onOpenItem?: (item: GridItem) => void
+  /** Tap an empty cell to fill it — opens the parent's photo sheet. */
+  onPickCell?: (position: number) => void
   /** Minimum rows to show — the grid still grows past this, never hiding placed photos. */
   minRows?: number
 }) {
   const [overCell, setOverCell] = useState<number | null>(null)
+
+  /* Touch reorder (mouse keeps native HTML5 drag): long-press lifts a tile,
+   * the finger drags it, releasing over a cell drops it there. */
+  const longPress = useRef<number | null>(null)
+  const touchDragging = useRef(false)
+  const justDragged = useRef(false)
+
+  const cellFromPoint = (x: number, y: number): number | null => {
+    const el = document.elementFromPoint(x, y)?.closest('[data-cell]')
+    return el ? Number((el as HTMLElement).dataset.cell) : null
+  }
+
+  const tilePointerDown = (e: React.PointerEvent, item: GridItem) => {
+    if (e.pointerType !== 'touch') return
+    const target = e.currentTarget as HTMLElement
+    const pointerId = e.pointerId
+    longPress.current = window.setTimeout(() => {
+      longPress.current = null
+      touchDragging.current = true
+      setDrag({ kind: 'cell', photoId: item.photoId })
+      try { target.setPointerCapture(pointerId) } catch { /* gone */ }
+      navigator.vibrate?.(10)
+    }, 220)
+  }
+
+  const tilePointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return
+    if (!touchDragging.current) {
+      // moved before the long-press finished — the finger is scrolling
+      if (longPress.current !== null) { clearTimeout(longPress.current); longPress.current = null }
+      return
+    }
+    setOverCell(cellFromPoint(e.clientX, e.clientY))
+  }
+
+  const tilePointerEnd = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return
+    if (longPress.current !== null) { clearTimeout(longPress.current); longPress.current = null }
+    if (!touchDragging.current) return
+    touchDragging.current = false
+    justDragged.current = true
+    window.setTimeout(() => { justDragged.current = false }, 50)
+    const pos = e.type === 'pointercancel' ? null : cellFromPoint(e.clientX, e.clientY)
+    if (pos !== null) dropOnCell(pos)
+    else { setDrag(null); setOverCell(null) }
+  }
 
   const cellCount = useMemo(() => {
     const maxPos = items.length ? Math.max(...items.map((i) => i.position)) : -1
@@ -118,6 +166,7 @@ export function GridCanvas({ items, drag, setDrag, onPlace, onSwap, onRemove, on
         return (
           <div
             key={pos}
+            data-cell={pos}
             onDragOver={(e) => { e.preventDefault(); setOverCell(pos) }}
             onDragLeave={() => setOverCell((c) => (c === pos ? null : c))}
             onDrop={(e) => { e.preventDefault(); dropOnCell(pos) }}
@@ -133,9 +182,13 @@ export function GridCanvas({ items, drag, setDrag, onPlace, onSwap, onRemove, on
                 draggable
                 onDragStart={() => setDrag({ kind: 'cell', photoId: item.photoId })}
                 onDragEnd={() => { setDrag(null); setOverCell(null) }}
-                onClick={() => onOpenItem?.(item)}
+                onPointerDown={(e) => tilePointerDown(e, item)}
+                onPointerMove={tilePointerMove}
+                onPointerUp={tilePointerEnd}
+                onPointerCancel={tilePointerEnd}
+                onClick={() => { if (!justDragged.current) onOpenItem?.(item) }}
                 className={clsx(
-                  'absolute inset-0 cursor-grab active:cursor-grabbing group',
+                  'absolute inset-0 cursor-grab active:cursor-grabbing group touch-none',
                   drag?.photoId === item.photoId && 'opacity-50',
                 )}
               >
@@ -144,10 +197,18 @@ export function GridCanvas({ items, drag, setDrag, onPlace, onSwap, onRemove, on
                   role="button"
                   aria-label="Remove from grid"
                   onClick={(e) => { e.stopPropagation(); onRemove(item.photoId) }}
-                  className="absolute top-1 right-1 size-6 rounded-full bg-black/55 text-white hidden group-hover:flex items-center justify-center text-xs"
+                  className="absolute top-1 right-1 size-6 rounded-full bg-black/55 text-white hidden group-hover:flex pointer-coarse:flex items-center justify-center text-xs"
                 >
                   ✕
                 </span>
+              </button>
+            ) : onPickCell ? (
+              <button
+                onClick={() => onPickCell(pos)}
+                aria-label={`Add a photo to cell ${pos + 1}`}
+                className="absolute inset-1.5 rounded-(--nv-radius-sm) border border-dashed border-border flex items-center justify-center text-ink-faint hover:text-ink hover:border-ink-faint transition-colors"
+              >
+                <Plus className="size-5" aria-hidden />
               </button>
             ) : (
               <span className="absolute inset-1.5 rounded-(--nv-radius-sm) border border-dashed border-border flex items-center justify-center text-ink-faint">

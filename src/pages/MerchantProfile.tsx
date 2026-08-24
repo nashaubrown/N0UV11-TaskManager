@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Bookmark, ChartColumn, ChevronDown, Copy, Grid3x3, Heart, Link2, MessageCircle, Play, Plus, Send, Sparkles, SquarePlay, SquareUser, Trash2, UserPlus } from 'lucide-react'
+import { ArrowLeft, Bookmark, ChartColumn, ChevronDown, Copy, Grid3x3, Heart, Link2, MessageCircle, Play, Send, Sparkles, SquarePlay, SquareUser, Trash2, UserPlus } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { Button } from '../components/common/Button'
 import { Card } from '../components/common/Card'
 import { EmptyState } from '../components/common/EmptyState'
 import { api, absoluteUrl, DEMO } from '../services/api'
-import { RowsPicker, useGridRows } from '../components/photo/GridCanvas'
+import { GridCanvas, RowsPicker, useGridRows } from '../components/photo/GridCanvas'
+import { PickSheet } from '../components/photo/PickSheet'
 import { useData } from '../store/data'
 import { demoAnalytics } from '../services/analyticsData'
 import { compact } from '../components/analytics/MetricChart'
@@ -20,7 +21,7 @@ import type { FeedItem, FeedLive } from '../types'
 
 export default function MerchantProfile() {
   const { merchantId } = useParams()
-  const { merchants, photos } = useData()
+  const { merchants, photos, addPhotos } = useData()
   const merchant = merchants.find((m) => m.id === merchantId)
 
   const [items, setItems] = useState<FeedItem[]>([])
@@ -33,7 +34,8 @@ export default function MerchantProfile() {
   const [captionBusy, setCaptionBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [drag, setDrag] = useState<{ kind: 'lib' | 'cell'; photoId: string } | null>(null)
-  const [overCell, setOverCell] = useState<number | null>(null)
+  const [pickFor, setPickFor] = useState<number | null>(null)
+  const [pickBusy, setPickBusy] = useState(false)
   const [query, setQuery] = useState('')
 
   useEffect(() => {
@@ -81,11 +83,6 @@ export default function MerchantProfile() {
   /** Grid cells: at least the chosen rows, and a fresh row appears once the
    *  last row holds a photo — the minimum never hides placed photos. */
   const [minRows, setMinRows] = useGridRows(`feed:${merchantId}`)
-  const cellCount = useMemo(() => {
-    const maxPos = items.length ? Math.max(...items.map((i) => i.position)) : -1
-    return Math.max(minRows * 3, Math.ceil((maxPos + 2) / 3) * 3)
-  }, [items, minRows])
-  const byCell = useMemo(() => new Map(items.map((i) => [i.position, i])), [items])
 
   /** Put a photo in an exact cell (replacing any occupant) — persisted immediately. */
   const placeAt = async (photoId: string, position: number) => {
@@ -124,16 +121,24 @@ export default function MerchantProfile() {
     }
   }
 
-  const dropOnCell = (position: number) => {
-    setOverCell(null)
-    if (!drag) return
-    const occupant = byCell.get(position)
-    if (drag.kind === 'cell' && occupant && occupant.photoId !== drag.photoId) {
-      void swapCells(drag.photoId, occupant.photoId)
-    } else if (!occupant || occupant.photoId !== drag.photoId) {
-      void placeAt(drag.photoId, position)
+  /** Tap-to-fill (touch and click): pick from this merchant's library, or upload straight into the cell. */
+  const pickPhoto = (photoId: string) => {
+    if (pickFor === null) return
+    void placeAt(photoId, pickFor)
+    setPickFor(null)
+  }
+
+  const pickUpload = async (list: FileList | null) => {
+    const images = [...(list ?? [])].filter((f) => f.type.startsWith('image/'))
+    if (!images.length || pickFor === null) return
+    setPickBusy(true)
+    try {
+      const added = await addPhotos(images, { merchantId })
+      if (added[0]) void placeAt(added[0].id, pickFor)
+      setPickFor(null)
+    } finally {
+      setPickBusy(false)
     }
-    setDrag(null)
   }
 
   const remove = async (photoId: string) => {
@@ -210,11 +215,13 @@ export default function MerchantProfile() {
         {/* phone frame */}
         {/* iPhone Pro Max proportions: ~430pt wide, 19.5:9 */}
         <div className="w-[430px] max-w-full rounded-[54px] border-[12px] border-ink bg-black shadow-xl overflow-hidden">
-          <div className="bg-white dark:bg-neutral-950 min-h-[890px] flex flex-col">
+          {/* fixed phone height — the screen scrolls inside, like a real phone */}
+          <div className="bg-white dark:bg-neutral-950 h-[780px] max-h-[80dvh] flex flex-col">
             {/* dynamic island */}
-            <div className="h-10 bg-inherit flex items-center justify-center">
+            <div className="h-10 bg-inherit flex items-center justify-center shrink-0">
               <div className="w-28 h-6 rounded-full bg-black" />
             </div>
+            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col overscroll-contain">
             <div className="px-4 pb-2 flex items-center justify-between">
               {igUrl ? (
                 <a href={igUrl} target="_blank" rel="noreferrer"
@@ -365,6 +372,7 @@ export default function MerchantProfile() {
               </p>
             )}
             <div className="mt-auto h-8" />
+            </div>
           </div>
         </div>
 
@@ -374,55 +382,26 @@ export default function MerchantProfile() {
           <Card padding="md" className="grid gap-2.5 content-start">
             <div>
               <h2 className="font-display font-semibold text-lg text-ink">Grid builder</h2>
-              <p className="text-sm text-ink-muted">Drag photos from the library into a cell. Drag between cells to swap. Every move saves instantly.</p>
+              <p className="text-sm text-ink-muted">
+                <span className="hidden desktop:inline">Drag photos from the library into a cell, or tap an empty cell to fill it. Every move saves instantly.</span>
+                <span className="desktop:hidden">Tap a cell to add a photo. Hold a photo, then drag it to reorder. Every move saves instantly.</span>
+              </p>
             </div>
             <RowsPicker value={minRows} onChange={setMinRows} />
-            <div className="grid grid-cols-3 bg-surface-2 border border-border rounded-(--nv-radius-md) overflow-hidden">
-              {Array.from({ length: cellCount }, (_, pos) => {
-                const item = byCell.get(pos)
-                return (
-                  <div
-                    key={pos}
-                    onDragOver={(e) => { e.preventDefault(); setOverCell(pos) }}
-                    onDragLeave={() => setOverCell((c) => (c === pos ? null : c))}
-                    onDrop={(e) => { e.preventDefault(); dropOnCell(pos) }}
-                    className={clsx(
-                      'relative aspect-square',
-                      overCell === pos && 'outline-2 outline-dashed outline-(--nv-coral) -outline-offset-2 z-10',
-                      !item && 'bg-surface-2',
-                    )}
-                    aria-label={item ? item.title ?? 'Grid photo' : `Empty cell ${pos + 1}`}
-                  >
-                    {item ? (
-                      <button
-                        draggable
-                        onDragStart={() => setDrag({ kind: 'cell', photoId: item.photoId })}
-                        onDragEnd={() => { setDrag(null); setOverCell(null) }}
-                        onClick={() => { setOpenItem(item); setCaption(item.caption ?? '') }}
-                        className={clsx(
-                          'absolute inset-0 cursor-grab active:cursor-grabbing group',
-                          drag?.photoId === item.photoId && 'opacity-50',
-                        )}
-                      >
-                        <img src={item.thumbUrl} alt="" className="size-full object-cover" draggable={false} />
-                        <span
-                          role="button"
-                          aria-label="Remove from grid"
-                          onClick={(e) => { e.stopPropagation(); void remove(item.photoId) }}
-                          className="absolute top-1 right-1 size-5 rounded-full bg-black/55 text-white hidden group-hover:flex items-center justify-center text-[11px]"
-                        >
-                          ✕
-                        </span>
-                      </button>
-                    ) : (
-                      <span className="absolute inset-1 rounded-(--nv-radius-sm) border border-dashed border-border flex items-center justify-center text-ink-faint">
-                        <Plus className="size-4" aria-hidden />
-                      </span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            <GridCanvas
+              items={items}
+              drag={drag}
+              setDrag={setDrag}
+              minRows={minRows}
+              onPickCell={setPickFor}
+              onPlace={(photoId, position) => void placeAt(photoId, position)}
+              onSwap={(a, b) => void swapCells(a, b)}
+              onRemove={(id) => void remove(id)}
+              onOpenItem={(gi) => {
+                const fi = items.find((i) => i.photoId === gi.photoId)
+                if (fi) { setOpenItem(fi); setCaption(fi.caption ?? '') }
+              }}
+            />
             <p className="text-xs text-ink-muted">Top-left posts last, like Instagram. The phone preview mirrors this grid.</p>
           </Card>
 
@@ -432,6 +411,15 @@ export default function MerchantProfile() {
               <h2 className="font-display font-semibold text-lg text-ink">Photo library</h2>
               <p className="text-sm text-ink-muted">{merchant.name}'s photos — drag any of them onto the grid.</p>
             </div>
+            <PickSheet
+              open={pickFor !== null}
+              busy={pickBusy}
+              photos={library}
+              usedIds={inPlan}
+              onPick={pickPhoto}
+              onUpload={(files) => void pickUpload(files)}
+              onClose={() => setPickFor(null)}
+            />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -451,7 +439,7 @@ export default function MerchantProfile() {
                       key={p.id}
                       draggable
                       onDragStart={() => setDrag({ kind: 'lib', photoId: p.id })}
-                      onDragEnd={() => { setDrag(null); setOverCell(null) }}
+                      onDragEnd={() => setDrag(null)}
                       title={p.title}
                       className={clsx(
                         'relative aspect-square rounded-(--nv-radius-sm) overflow-hidden bg-surface-2 cursor-grab active:cursor-grabbing',
