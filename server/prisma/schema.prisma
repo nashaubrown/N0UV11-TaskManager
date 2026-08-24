@@ -203,6 +203,7 @@ model merchants {
   photos          photos[]
   photoshoots     photoshoots[]
   social_accounts social_accounts[]
+  task_lists      task_lists[]
 
   @@unique([organization_id, name])
 }
@@ -250,6 +251,7 @@ model organizations {
   share_links                 share_links[]
   social_accounts             social_accounts[]
   task_labels                 task_labels[]
+  task_lists                  task_lists[]
   tasks                       tasks[]
   teams                       teams[]
 }
@@ -332,6 +334,7 @@ model photos {
   projects_photos_project_idToprojects     projects?           @relation("photos_project_idToprojects", fields: [project_id], references: [id], onUpdate: NoAction)
   users                                    users?              @relation(fields: [uploaded_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
   projects_projects_cover_photo_idTophotos projects[]          @relation("projects_cover_photo_idTophotos")
+  task_attachments                         task_attachments[]
 }
 
 model projects {
@@ -410,36 +413,45 @@ model task_labels {
 }
 
 model tasks {
-  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id  String             @db.Uuid
-  project_id       String?            @db.Uuid
-  parent_task_id   String?            @db.Uuid
-  title            String
-  description      String?
-  status           task_status        @default(todo)
-  priority         task_priority      @default(medium)
-  due_at           DateTime?          @db.Timestamptz(6)
-  completed_at     DateTime?          @db.Timestamptz(6)
-  position         Int                @default(0)
-  created_by       String?            @db.Uuid
-  created_at       DateTime           @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
-  gcal_event_id    String?
-  gcal_synced_at   DateTime?          @db.Timestamptz(6)
-  comments         comments[]
-  deal_tasks       deal_tasks[]
-  gcal_sync_queue  gcal_sync_queue[]
-  task_assignees   task_assignees[]
-  task_label_links task_label_links[]
-  users            users?             @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  organizations    organizations      @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  tasks            tasks?             @relation("tasksTotasks", fields: [parent_task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  other_tasks      tasks[]            @relation("tasksTotasks")
-  projects         projects?          @relation(fields: [project_id], references: [id], onUpdate: NoAction)
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id      String                 @db.Uuid
+  project_id           String?                @db.Uuid
+  parent_task_id       String?                @db.Uuid
+  title                String
+  description          String?
+  status               task_status            @default(todo)
+  priority             task_priority          @default(medium)
+  due_at               DateTime?              @db.Timestamptz(6)
+  completed_at         DateTime?              @db.Timestamptz(6)
+  position             Int                    @default(0)
+  created_by           String?                @db.Uuid
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  gcal_event_id        String?
+  gcal_synced_at       DateTime?              @db.Timestamptz(6)
+  list_id              String?                @db.Uuid
+  starts_at            DateTime?              @db.Timestamptz(6)
+  estimate_minutes     Int?
+  comments             comments[]
+  deal_tasks           deal_tasks[]
+  gcal_sync_queue      gcal_sync_queue[]
+  task_assignees       task_assignees[]
+  task_attachments     task_attachments[]
+  task_checklist_items task_checklist_items[]
+  task_field_values    task_field_values[]
+  task_label_links     task_label_links[]
+  task_time_entries    task_time_entries[]
+  users                users?                 @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  task_lists           task_lists?            @relation(fields: [list_id], references: [id], onUpdate: NoAction)
+  organizations        organizations          @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks                tasks?                 @relation("tasksTotasks", fields: [parent_task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_tasks          tasks[]                @relation("tasksTotasks")
+  projects             projects?              @relation(fields: [project_id], references: [id], onUpdate: NoAction)
 
   @@index([parent_task_id], map: "idx_tasks_parent")
   @@index([project_id], map: "idx_tasks_project")
   @@index([title(ops: raw("gin_trgm_ops"))], map: "idx_tasks_title_trgm", type: Gin)
+  @@index([list_id], map: "idx_tasks_list")
 }
 
 model team_members {
@@ -495,6 +507,8 @@ model users {
   shoot_gcal_events                                           shoot_gcal_events[]
   social_accounts                                             social_accounts[]
   task_assignees                                              task_assignees[]
+  task_lists                                                  task_lists[]
+  task_time_entries                                           task_time_entries[]
   tasks                                                       tasks[]
   team_members                                                team_members[]
 }
@@ -664,6 +678,73 @@ model shoot_gcal_events {
   users       users       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@id([shoot_id, user_id])
+}
+
+model list_fields {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  list_id           String              @db.Uuid
+  name              String
+  position          Int                 @default(0)
+  task_lists        task_lists          @relation(fields: [list_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  task_field_values task_field_values[]
+}
+
+model task_attachments {
+  task_id  String @db.Uuid
+  photo_id String @db.Uuid
+  photos   photos @relation(fields: [photo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks    tasks  @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([task_id, photo_id])
+}
+
+model task_checklist_items {
+  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  task_id  String  @db.Uuid
+  label    String
+  done     Boolean @default(false)
+  position Int     @default(0)
+  tasks    tasks   @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model task_field_values {
+  task_id     String      @db.Uuid
+  field_id    String      @db.Uuid
+  value       String?
+  list_fields list_fields @relation(fields: [field_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks       tasks       @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([task_id, field_id])
+}
+
+model task_lists {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String        @db.Uuid
+  merchant_id     String?       @db.Uuid
+  name            String
+  position        Int           @default(0)
+  created_by      String?       @db.Uuid
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  list_fields     list_fields[]
+  users           users?        @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  merchants       merchants?    @relation(fields: [merchant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks           tasks[]
+
+  @@index([organization_id, merchant_id, position], map: "idx_task_lists_org")
+}
+
+model task_time_entries {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  task_id    String    @db.Uuid
+  user_id    String    @db.Uuid
+  started_at DateTime  @default(now()) @db.Timestamptz(6)
+  ended_at   DateTime? @db.Timestamptz(6)
+  seconds    Int?
+  tasks      tasks     @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([task_id], map: "idx_time_entries_task")
 }
 
 enum ai_tag_status {

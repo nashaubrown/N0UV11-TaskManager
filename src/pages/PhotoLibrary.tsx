@@ -26,6 +26,29 @@ const STATUS_LABEL: Record<StatusKey, string> = {
   rejected: 'Rejected',
 }
 
+function TreeRow({ active, onClick, icon, count, children }: {
+  active: boolean
+  onClick: () => void
+  icon: ReactNode
+  count?: number
+  children: ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={
+        active
+          ? 'flex items-center gap-2 px-3 py-1.5 text-sm text-left bg-coral/10 text-ink font-medium border-r-2 border-(--nv-coral)'
+          : 'flex items-center gap-2 px-3 py-1.5 text-sm text-left text-ink-muted hover:bg-surface-2'
+      }
+    >
+      <span className="shrink-0">{icon}</span>
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {count !== undefined && <span className="text-xs text-ink-faint tabular-nums">{count}</span>}
+    </button>
+  )
+}
+
 function FilterCheck({ checked, onChange, children, count }: {
   checked: boolean
   onChange: () => void
@@ -138,28 +161,36 @@ export default function PhotoLibrary() {
       </label>
 
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-1.5 flex items-center gap-1.5">
-          <Store className="size-3.5" aria-hidden /> Merchant
-        </h3>
-        <div className="grid">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-1.5">Library</h3>
+        <div className="grid -mx-2">
+          <TreeRow
+            active={merchantSel.size === 0}
+            onClick={() => setMerchantSel(new Set())}
+            icon={<ImagePlus className="size-3.5" aria-hidden />}
+            count={photos.length}
+          >
+            All photos
+          </TreeRow>
           {merchants.map((m) => (
-            <FilterCheck
+            <TreeRow
               key={m.id}
-              checked={merchantSel.has(m.id)}
-              onChange={() => setMerchantSel((s) => toggle(s, m.id))}
+              active={merchantSel.has(m.id)}
+              onClick={() => setMerchantSel((s) => (s.has(m.id) ? new Set() : new Set([m.id])))}
+              icon={<Store className="size-3.5" aria-hidden />}
               count={merchantCount(m.id)}
             >
               {m.name}
-            </FilterCheck>
+            </TreeRow>
           ))}
           {hasUnassigned && (
-            <FilterCheck
-              checked={merchantSel.has('none')}
-              onChange={() => setMerchantSel((s) => toggle(s, 'none'))}
+            <TreeRow
+              active={merchantSel.has('none')}
+              onClick={() => setMerchantSel((s) => (s.has('none') ? new Set() : new Set(['none'])))}
+              icon={<ImagePlus className="size-3.5" aria-hidden />}
               count={merchantCount('none')}
             >
               Unassigned
-            </FilterCheck>
+            </TreeRow>
           )}
         </div>
       </section>
@@ -241,7 +272,7 @@ export default function PhotoLibrary() {
                onChange={(e) => { ingest(e.target.files); e.target.value = '' }} />
       </div>
 
-      <div className="desktop:grid desktop:grid-cols-[230px_1fr] desktop:gap-6 desktop:items-start">
+      <div className="desktop:grid desktop:grid-cols-[240px_1fr] desktop:gap-6 desktop:items-start">
         {/* filter panel — sidebar on desktop, drawer on mobile */}
         <aside className="hidden desktop:block sticky top-20 rounded-(--nv-radius-lg) border border-border bg-surface p-4">
           {filterPanel}
@@ -263,12 +294,12 @@ export default function PhotoLibrary() {
                     {g.subtitle && <span className="text-sm text-ink-muted">{g.subtitle}</span>}
                     <span className="text-sm text-ink-faint tabular-nums">· {g.photos.length}</span>
                   </div>
-                  <PhotoGallery photos={g.photos} onOpen={(p) => setViewerIndex(filtered.findIndex((x) => x.id === p.id))} />
+                  <PhotoGallery photos={g.photos} large onOpen={(p) => setViewerIndex(filtered.findIndex((x) => x.id === p.id))} />
                 </section>
               ))}
             </div>
           ) : (
-            <PhotoGallery photos={filtered} onOpen={(p) => setViewerIndex(filtered.findIndex((x) => x.id === p.id))} />
+            <PhotoGallery photos={filtered} large onOpen={(p) => setViewerIndex(filtered.findIndex((x) => x.id === p.id))} />
           )}
         </div>
       </div>

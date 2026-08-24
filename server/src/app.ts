@@ -23,6 +23,7 @@ import { pushRouter } from './routes/push.js'
 import { portalRouter, shareLinksRouter } from './routes/portal.js'
 import { feedRouter } from './routes/feed.js'
 import { analyticsRouter } from './routes/analytics.js'
+import { listsRouter } from './routes/lists.js'
 
 export function createApp() {
   const app = express()
@@ -59,6 +60,7 @@ export function createApp() {
   app.use('/api/share-links', shareLinksRouter)
   app.use('/api/portal', portalRouter)
   app.use('/api/analytics', analyticsRouter)
+  app.use('/api/lists', listsRouter)
 
   // API docs at /api/docs
   try {

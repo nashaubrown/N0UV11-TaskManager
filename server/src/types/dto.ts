@@ -33,12 +33,20 @@ export const createTaskDto = z.object({
   description: z.string().max(10_000).optional(),
   status: taskStatus.default('todo'),
   priority: taskPriority.default('medium'),
+  startsAt: z.string().datetime({ offset: true }).optional(),
   dueAt: z.string().datetime({ offset: true }).optional(),
   projectId: z.string().uuid().optional(),
+  listId: z.string().uuid().optional(),
   parentTaskId: z.string().uuid().optional(),
   assigneeIds: z.array(z.string().uuid()).max(20).default([]),
+  estimateMinutes: z.number().int().min(0).max(100_000).optional(),
 })
-export const updateTaskDto = createTaskDto.partial()
+export const updateTaskDto = createTaskDto.partial().extend({
+  startsAt: z.string().datetime({ offset: true }).nullable().optional(),
+  dueAt: z.string().datetime({ offset: true }).nullable().optional(),
+  estimateMinutes: z.number().int().min(0).max(100_000).nullable().optional(),
+  fieldValues: z.array(z.object({ fieldId: z.string().uuid(), value: z.string().max(2000) })).max(30).optional(),
+})
 export const bulkStatusDto = z.object({
   taskIds: z.array(z.string().uuid()).min(1).max(100),
   status: taskStatus,

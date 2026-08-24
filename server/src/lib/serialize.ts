@@ -19,13 +19,26 @@ export const sProject = (p: any, stats?: { taskCount: number; completedTaskCount
 export const sTask = (t: any) => ({
   id: t.id,
   projectId: t.project_id ?? undefined,
+  listId: t.list_id ?? undefined,
   parentTaskId: t.parent_task_id ?? undefined,
   title: t.title,
   description: t.description ?? undefined,
   status: t.status,
   priority: t.priority,
+  startsAt: t.starts_at ?? undefined,
   dueAt: t.due_at ?? undefined,
   completedAt: t.completed_at ?? undefined,
+  estimateMinutes: t.estimate_minutes ?? undefined,
+  fieldValues: (t.task_field_values ?? []).map((v: any) => ({ fieldId: v.field_id, value: v.value ?? '' })),
+  checklist: (t.task_checklist_items ?? [])
+    .sort((a: any, b: any) => a.position - b.position)
+    .map((c: any) => ({ id: c.id, label: c.label, done: c.done })),
+  attachmentIds: (t.task_attachments ?? []).map((a: any) => a.photo_id),
+  trackedSeconds: (t.task_time_entries ?? []).reduce((s: number, e: any) => s + (e.seconds ?? 0), 0),
+  runningEntry: (() => {
+    const open = (t.task_time_entries ?? []).find((e: any) => !e.ended_at)
+    return open ? { userId: open.user_id, startedAt: open.started_at } : undefined
+  })(),
   assignees: (t.task_assignees ?? []).map((a: any) => sUser(a.users)),
   labels: (t.task_label_links ?? []).map((l: any) => ({ id: l.task_labels.id, name: l.task_labels.name, color: l.task_labels.color })),
   subtaskCount: t._count?.other_tasks ?? 0,

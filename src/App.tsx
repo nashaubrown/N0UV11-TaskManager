@@ -12,7 +12,7 @@ import Portal from './pages/Portal'
 import { Privacy, DataDeletion } from './pages/Legal'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
-const Projects = lazy(() => import('./pages/Projects'))
+const Workspace = lazy(() => import('./pages/Workspace'))
 const ProjectView = lazy(() => import('./pages/ProjectView'))
 const Tasks = lazy(() => import('./pages/Tasks'))
 const Calendar = lazy(() => import('./pages/Calendar'))
@@ -39,7 +39,7 @@ function AppRoutes() {
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<Suspense fallback={<PageFallback />}><Dashboard /></Suspense>} />
-        <Route path="projects" element={<Suspense fallback={<PageFallback />}><Projects /></Suspense>} />
+        <Route path="projects" element={<Suspense fallback={<PageFallback />}><Workspace /></Suspense>} />
         <Route path="projects/:projectId" element={<Suspense fallback={<PageFallback />}><ProjectView /></Suspense>} />
         <Route path="tasks" element={<Suspense fallback={<PageFallback />}><Tasks /></Suspense>} />
         <Route path="calendar" element={<Suspense fallback={<PageFallback />}><Calendar /></Suspense>} />
