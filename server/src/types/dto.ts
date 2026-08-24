@@ -78,6 +78,14 @@ export const updatePhotoDto = z.object({
   merchantId: z.string().uuid().nullable().optional(),
 })
 export const addTagDto = z.object({ tag: z.string().min(1).max(100) })
+export const importDriveDto = z.object({
+  files: z.array(z.object({
+    id: z.string().min(1).max(200),
+    name: z.string().max(300).optional(),
+    mimeType: z.string().max(150).optional(),
+  })).min(1).max(30),
+  merchantId: z.string().uuid().optional(),
+})
 
 /* ---------- comments ---------- */
 export const createCommentDto = z.object({

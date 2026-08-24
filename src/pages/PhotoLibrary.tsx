@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  Camera, CloudOff, Download, ImagePlus, LayoutGrid, Rows3, Search,
+  Camera, CloudDownload, CloudOff, Download, ImagePlus, LayoutGrid, Rows3, Search,
   SlidersHorizontal, Sparkles, Store, Trash2, Upload, X,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Button } from '../components/common/Button'
+import { Modal } from '../components/common/Modal'
+import { Select } from '../components/common/Input'
+import { driveConfig, importDrivePhotos, pickDrivePhotos, type DrivePick } from '../services/googleDrive'
 import { PhotoGallery } from '../components/photo/PhotoGallery'
 import { PhotoViewer } from '../components/photo/PhotoViewer'
-import { GridCanvas, type GridDrag, type GridItem } from '../components/photo/GridCanvas'
+import { GridCanvas, RowsPicker, useGridRows, type GridDrag, type GridItem } from '../components/photo/GridCanvas'
 import { EmptyState } from '../components/common/EmptyState'
 import { api, absoluteUrl, DEMO } from '../services/api'
 import { useData } from '../store/data'
@@ -74,7 +77,7 @@ function FilterCheck({ checked, onChange, children, count }: {
 }
 
 export default function PhotoLibrary() {
-  const { photos, merchants, addPhotos, pendingUploads } = useData()
+  const { photos, merchants, addPhotos, addImportedPhotos, pendingUploads } = useData()
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState('')
   const [merchantSel, setMerchantSel] = useState<Set<string>>(() => {
@@ -149,6 +152,58 @@ export default function PhotoLibrary() {
     ingest(e.dataTransfer.files)
   }
 
+  /* ---------- Google Drive import (Picker → server-side download) ---------- */
+  const [driveBusy, setDriveBusy] = useState(false)
+  const [drivePicks, setDrivePicks] = useState<DrivePick[] | null>(null)
+  const [driveMerchant, setDriveMerchant] = useState('')
+  const [driveGate, setDriveGate] = useState<'connect' | 'rescope' | 'unavailable' | null>(null)
+  const [driveMsg, setDriveMsg] = useState<string>()
+
+  const startDriveImport = async () => {
+    setDriveMsg(undefined)
+    setDriveBusy(true)
+    try {
+      const cfg = await driveConfig()
+      if (!cfg.configured) return setDriveGate('unavailable')
+      if (!cfg.connected) return setDriveGate('connect')
+      if (!cfg.hasDriveScope || !cfg.accessToken) return setDriveGate('rescope')
+      const picks = await pickDrivePhotos(cfg)
+      if (picks.length) {
+        const only = merchantSel.size === 1 ? [...merchantSel][0] : undefined
+        setDriveMerchant(only && only !== 'none' ? only : '')
+        setDrivePicks(picks)
+      }
+    } catch (e) {
+      setDriveMsg(e instanceof Error ? e.message : 'Drive import failed')
+    } finally {
+      setDriveBusy(false)
+    }
+  }
+
+  const connectGoogle = async () => {
+    const { url } = await api<{ url: string }>('GET', '/calendar/connect')
+    window.location.href = url
+  }
+
+  const runDriveImport = async () => {
+    if (!drivePicks?.length) return
+    setDriveBusy(true)
+    try {
+      const d = await importDrivePhotos(drivePicks, driveMerchant || undefined)
+      addImportedPhotos(d.items)
+      setDrivePicks(null)
+      setDriveMsg(
+        d.failed.length
+          ? `${d.items.length} imported · ${d.failed.length} failed (${d.failed[0].reason})`
+          : `${d.items.length} photo${d.items.length === 1 ? '' : 's'} imported from Drive`,
+      )
+    } catch (e) {
+      setDriveMsg(e instanceof Error ? e.message : 'Drive import failed')
+    } finally {
+      setDriveBusy(false)
+    }
+  }
+
   /* ---------- grid builder (always-split canvas) ---------- */
   const [boards, setBoards] = useState<Board[]>([])
   const [target, setTarget] = useState('')
@@ -173,6 +228,7 @@ export default function PhotoLibrary() {
 
   const targetKind = target.startsWith('board:') ? 'board' as const : target.startsWith('merchant:') ? 'merchant' as const : null
   const targetId = target.split(':')[1] ?? ''
+  const [minRows, setMinRows] = useGridRows(target || 'library')
 
   useEffect(() => {
     if (targetKind !== 'merchant' || !targetId || feedCache[targetId]) return
@@ -377,8 +433,20 @@ export default function PhotoLibrary() {
             icon={<Camera className="size-4" />}
             onClick={() => cameraInput.current?.click()}
           />
+          {!DEMO && (
+            <Button
+              variant="secondary" loading={driveBusy && !drivePicks}
+              icon={<CloudDownload className="size-4" />}
+              onClick={() => void startDriveImport()}
+            >
+              <span className="hidden tablet:inline">Import from Drive</span>
+            </Button>
+          )}
           <Button icon={<Upload className="size-4" />} onClick={() => fileInput.current?.click()}>Upload</Button>
         </div>
+        {driveMsg && (
+          <p className="w-full text-sm text-ink-muted" role="status">{driveMsg}</p>
+        )}
         <input ref={fileInput} type="file" accept="image/*" multiple className="hidden"
                onChange={(e) => { ingest(e.target.files); e.target.value = '' }} />
         <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden"
@@ -428,10 +496,12 @@ export default function PhotoLibrary() {
               <Button variant="secondary" size="sm" onClick={() => setBoardNaming(true)}>+ Board</Button>
             )}
           </div>
+          <RowsPicker value={minRows} onChange={setMinRows} />
           <GridCanvas
             items={gridItems}
             drag={gridDrag}
             setDrag={setGridDrag}
+            minRows={minRows}
             onPlace={gridPlace}
             onSwap={gridSwap}
             onRemove={gridRemove}
@@ -535,6 +605,52 @@ export default function PhotoLibrary() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Drive import: where the picked photos should land */}
+      <Modal open={Boolean(drivePicks)} onClose={() => setDrivePicks(null)} title="Import from Google Drive">
+        <div className="grid gap-4">
+          <p className="text-sm text-ink-2">
+            {drivePicks?.length} photo{(drivePicks?.length ?? 0) === 1 ? '' : 's'} selected
+            {(drivePicks?.length ?? 0) > 0 && (
+              <span className="text-ink-muted"> — {drivePicks!.slice(0, 3).map((p) => p.name ?? p.id).join(', ')}{drivePicks!.length > 3 ? '…' : ''}</span>
+            )}
+          </p>
+          <Select label="Assign to merchant" value={driveMerchant} onChange={(e) => setDriveMerchant(e.target.value)}>
+            <option value="">Unassigned</option>
+            {merchants.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </Select>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setDrivePicks(null)}>Cancel</Button>
+            <Button loading={driveBusy} onClick={() => void runDriveImport()}>Import</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Drive import: Google connection needed first */}
+      <Modal open={Boolean(driveGate)} onClose={() => setDriveGate(null)} title="Connect Google Drive">
+        <div className="grid gap-4">
+          {driveGate === 'unavailable' ? (
+            <p className="text-sm text-ink-2">
+              Google isn't configured on this server yet — set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+              (plus GOOGLE_PICKER_API_KEY and GOOGLE_PROJECT_NUMBER for the picker) and try again.
+            </p>
+          ) : (
+            <p className="text-sm text-ink-2">
+              {driveGate === 'rescope'
+                ? 'Your Google account is connected, but without Drive access yet — reconnect once to grant it. Only the files you pick in the Drive dialog ever become visible to NOUVII.'
+                : 'Connect your Google account to pick photos straight from Drive. Only the files you pick in the Drive dialog ever become visible to NOUVII.'}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setDriveGate(null)}>Cancel</Button>
+            {driveGate !== 'unavailable' && (
+              <Button onClick={() => void connectGoogle()}>
+                {driveGate === 'rescope' ? 'Reconnect Google' : 'Connect Google'}
+              </Button>
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

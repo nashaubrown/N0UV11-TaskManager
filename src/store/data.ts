@@ -106,6 +106,8 @@ interface DataState {
   taskTimer: (taskId: string, action: 'start' | 'stop') => Promise<void>
   taskDependency: (taskId: string, op: { add?: string; remove?: string }) => Promise<void>
   addPhotos: (files: File[], opts?: { projectId?: string; merchantId?: string }) => Promise<void>
+  /** Merge already-registered photos (e.g. a Drive import response) into the store. */
+  addImportedPhotos: (photos: Photo[]) => void
   addComment: (target: { taskId?: string; photoId?: string }, body: string) => Promise<void>
   addShoot: (input: NewShootInput) => Promise<Shoot>
   updateShoot: (id: string, patch: Partial<NewShootInput>) => Promise<void>
@@ -405,6 +407,12 @@ export const useData = create<DataState>((set, get) => ({
       ? await api<Task>('POST', `/tasks/${taskId}/dependencies`, { dependsOnTaskId: op.add })
       : await api<Task>('DELETE', `/tasks/${taskId}/dependencies/${op.remove}`)
     set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? task : t)) }))
+  },
+
+  addImportedPhotos: (ps) => {
+    set((s) => ({
+      photos: [...ps.filter((p) => !s.photos.some((x) => x.id === p.id)).map(mapPhoto), ...s.photos],
+    }))
   },
 
   addPhotos: async (files, opts) => {

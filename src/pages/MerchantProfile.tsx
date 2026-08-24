@@ -7,6 +7,7 @@ import { Button } from '../components/common/Button'
 import { Card } from '../components/common/Card'
 import { EmptyState } from '../components/common/EmptyState'
 import { api, absoluteUrl, DEMO } from '../services/api'
+import { RowsPicker, useGridRows } from '../components/photo/GridCanvas'
 import { useData } from '../store/data'
 import { demoAnalytics } from '../services/analyticsData'
 import { compact } from '../components/analytics/MetricChart'
@@ -77,11 +78,13 @@ export default function MerchantProfile() {
     )
   }, [photos, merchantId, query])
 
-  /** Grid cells: at least 3×3, and a fresh row appears once the last row holds a photo. */
+  /** Grid cells: at least the chosen rows, and a fresh row appears once the
+   *  last row holds a photo — the minimum never hides placed photos. */
+  const [minRows, setMinRows] = useGridRows(`feed:${merchantId}`)
   const cellCount = useMemo(() => {
     const maxPos = items.length ? Math.max(...items.map((i) => i.position)) : -1
-    return Math.max(9, Math.ceil((maxPos + 2) / 3) * 3)
-  }, [items])
+    return Math.max(minRows * 3, Math.ceil((maxPos + 2) / 3) * 3)
+  }, [items, minRows])
   const byCell = useMemo(() => new Map(items.map((i) => [i.position, i])), [items])
 
   /** Put a photo in an exact cell (replacing any occupant) — persisted immediately. */
@@ -373,6 +376,7 @@ export default function MerchantProfile() {
               <h2 className="font-display font-semibold text-lg text-ink">Grid builder</h2>
               <p className="text-sm text-ink-muted">Drag photos from the library into a cell. Drag between cells to swap. Every move saves instantly.</p>
             </div>
+            <RowsPicker value={minRows} onChange={setMinRows} />
             <div className="grid grid-cols-3 bg-surface-2 border border-border rounded-(--nv-radius-md) overflow-hidden">
               {Array.from({ length: cellCount }, (_, pos) => {
                 const item = byCell.get(pos)

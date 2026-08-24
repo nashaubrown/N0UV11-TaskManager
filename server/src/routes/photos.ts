@@ -5,16 +5,18 @@ import { notFound } from '../lib/errors.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
 import { requireCapability } from '../lib/permissions.js'
 import { validate } from '../middleware/validate.js'
-import { addTagDto, createCommentDto, registerPhotoDto, updatePhotoDto } from '../types/dto.js'
+import { addTagDto, createCommentDto, importDriveDto, registerPhotoDto, updatePhotoDto } from '../types/dto.js'
 import { sComment, sPhoto } from '../lib/serialize.js'
 import { pageParams, paged } from '../lib/pagination.js'
 import { param } from '../lib/params.js'
-import { publicUrlFor } from '../services/storage.js'
+import { localPut, presignUpload, publicUrlFor } from '../services/storage.js'
 import { audit } from '../services/audit.js'
 import { broadcast } from '../ws/hub.js'
 import { aiConfigured, enqueueAiProcessing } from '../services/ai.js'
 import { enqueueDriveBackup } from '../services/driveBackup.js'
+import { googleAccessToken } from '../services/gcal.js'
 import { badRequest } from '../lib/errors.js'
+import { config } from '../lib/config.js'
 
 export const photosRouter = Router()
 photosRouter.use(requireAuth)
@@ -95,6 +97,92 @@ photosRouter.post('/', requireCapability('photos.upload'), validate(registerPhot
   enqueueAiProcessing(photo.id, req.auth!.organizationId)
   enqueueDriveBackup(photo.id)
   res.status(201).json(out)
+})
+
+/** GET /photos/import/drive/config — what the Google Picker needs, plus
+ *  whether this user's Google connection already carries the Drive scope. */
+photosRouter.get('/import/drive/config', async (req, res) => {
+  if (!config.google.configured) return res.json({ configured: false, connected: false })
+  const token = await googleAccessToken(req.auth!.userId)
+  if (!token) return res.json({ configured: true, connected: false })
+  let hasDriveScope = false
+  try {
+    const info = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(token)}`)
+    if (info.ok) hasDriveScope = (((await info.json()) as { scope?: string }).scope ?? '').includes('drive.file')
+  } catch { /* treat as missing scope */ }
+  res.json({
+    configured: true,
+    connected: true,
+    hasDriveScope,
+    accessToken: hasDriveScope ? token : undefined,
+    apiKey: config.google.pickerApiKey || undefined,
+    appId: config.google.projectNumber || undefined,
+  })
+})
+
+/** POST /photos/import/drive — download Picker-selected Drive files server-side
+ *  and register them through the normal photo pipeline. */
+photosRouter.post('/import/drive', requireCapability('photos.upload'), validate(importDriveDto), async (req, res) => {
+  if (!config.google.configured) throw badRequest('Google is not configured on this server')
+  const token = await googleAccessToken(req.auth!.userId)
+  if (!token) throw badRequest('Connect Google first (Settings → Google Calendar)')
+  const items: unknown[] = []
+  const failed: { id: string; name?: string; reason: string }[] = []
+
+  for (const f of req.body.files as { id: string; name?: string; mimeType?: string }[]) {
+    try {
+      const fileUrl = (extra: string) =>
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(f.id)}?${extra}&supportsAllDrives=true`
+      const metaRes = await fetch(fileUrl('fields=name,mimeType,size'), { headers: { authorization: `Bearer ${token}` } })
+      if (!metaRes.ok) {
+        throw new Error(metaRes.status === 404
+          ? 'Not accessible to NOUVII — pick it again in the Drive dialog'
+          : `Drive lookup failed (${metaRes.status})`)
+      }
+      const meta = (await metaRes.json()) as { name?: string; mimeType?: string; size?: string }
+      const mimeType = meta.mimeType ?? f.mimeType ?? ''
+      if (!mimeType.startsWith('image/')) throw new Error('Not an image')
+      if (Number(meta.size ?? 0) > 50 * 1024 * 1024) throw new Error('Larger than 50 MB')
+
+      const fileRes = await fetch(fileUrl('alt=media'), { headers: { authorization: `Bearer ${token}` } })
+      if (!fileRes.ok) throw new Error(`Drive download failed (${fileRes.status})`)
+      const bytes = Buffer.from(await fileRes.arrayBuffer())
+
+      const name = meta.name ?? f.name ?? 'drive-import.jpg'
+      const presigned = await presignUpload(name, mimeType)
+      if (config.storage.driver === 'local') {
+        await localPut(presigned.key, bytes)
+      } else {
+        const up = await fetch(presigned.uploadUrl, { method: 'PUT', headers: presigned.headers, body: bytes })
+        if (!up.ok) throw new Error(`Storage upload failed (${up.status})`)
+      }
+
+      const photo = await prisma.photos.create({
+        data: {
+          organization_id: req.auth!.organizationId,
+          merchant_id: req.body.merchantId,
+          uploaded_by: req.auth!.userId,
+          status: 'ready',
+          title: name.replace(/\.[a-z0-9]+$/i, ''),
+          s3_key: presigned.key,
+          content_type: mimeType,
+          size_bytes: bytes.length,
+          photo_versions: { create: { version_no: 1, s3_key: presigned.key, size_bytes: bytes.length, created_by: req.auth!.userId } },
+        },
+        include: photoInclude,
+      })
+      const out = serialize(photo)
+      audit(req, 'photo.create', 'photo', photo.id, { key: presigned.key, source: 'drive' })
+      broadcast(req.auth!.organizationId, 'photo.created', out)
+      enqueueAiProcessing(photo.id, req.auth!.organizationId)
+      enqueueDriveBackup(photo.id)
+      items.push(out)
+    } catch (e) {
+      failed.push({ id: f.id, name: f.name, reason: e instanceof Error ? e.message : 'Import failed' })
+    }
+  }
+
+  res.status(items.length ? 201 : 400).json({ items, failed })
 })
 
 /** GET /photos/:id */
