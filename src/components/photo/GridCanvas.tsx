@@ -94,48 +94,70 @@ export function GridCanvas({ items, drag, setDrag, onPlace, onSwap, onRemove, on
   minRows?: number
 }) {
   const [overCell, setOverCell] = useState<number | null>(null)
+  const [ghost, setGhost] = useState<{ x: number; y: number; thumbUrl: string } | null>(null)
 
-  /* Touch reorder (mouse keeps native HTML5 drag): long-press lifts a tile,
-   * the finger drags it, releasing over a cell drops it there. */
-  const longPress = useRef<number | null>(null)
+  /* Touch reorder (mouse keeps native HTML5 drag). The tiles opt out of every
+   * browser touch behavior (scroll, context menu, image callout), so a drag
+   * engages the moment the finger moves — or after a 150ms hold — with a
+   * ghost thumbnail under the finger and auto-scroll near the screen edges. */
+  const hold = useRef<number | null>(null)
   const touchDragging = useRef(false)
   const justDragged = useRef(false)
+  const start = useRef({ x: 0, y: 0 })
 
   const cellFromPoint = (x: number, y: number): number | null => {
     const el = document.elementFromPoint(x, y)?.closest('[data-cell]')
     return el ? Number((el as HTMLElement).dataset.cell) : null
   }
 
+  const lift = (item: GridItem, target: HTMLElement, pointerId: number, x: number, y: number) => {
+    if (touchDragging.current) return
+    touchDragging.current = true
+    setDrag({ kind: 'cell', photoId: item.photoId })
+    setGhost({ x, y, thumbUrl: item.thumbUrl })
+    try { target.setPointerCapture(pointerId) } catch { /* gone */ }
+    navigator.vibrate?.(10)
+  }
+
   const tilePointerDown = (e: React.PointerEvent, item: GridItem) => {
     if (e.pointerType !== 'touch') return
     const target = e.currentTarget as HTMLElement
     const pointerId = e.pointerId
-    longPress.current = window.setTimeout(() => {
-      longPress.current = null
-      touchDragging.current = true
-      setDrag({ kind: 'cell', photoId: item.photoId })
-      try { target.setPointerCapture(pointerId) } catch { /* gone */ }
-      navigator.vibrate?.(10)
-    }, 220)
+    start.current = { x: e.clientX, y: e.clientY }
+    // a still hold lifts too, so both "hold then drag" and "just drag" work
+    hold.current = window.setTimeout(() => {
+      hold.current = null
+      lift(item, target, pointerId, start.current.x, start.current.y)
+    }, 150)
   }
 
-  const tilePointerMove = (e: React.PointerEvent) => {
+  const tilePointerMove = (e: React.PointerEvent, item: GridItem) => {
     if (e.pointerType !== 'touch') return
     if (!touchDragging.current) {
-      // moved before the long-press finished — the finger is scrolling
-      if (longPress.current !== null) { clearTimeout(longPress.current); longPress.current = null }
+      // moving more than finger jitter engages the drag immediately
+      const moved = Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y)
+      if (moved > 6) {
+        if (hold.current !== null) { clearTimeout(hold.current); hold.current = null }
+        lift(item, e.currentTarget as HTMLElement, e.pointerId, e.clientX, e.clientY)
+      }
       return
     }
+    setGhost((g) => (g ? { ...g, x: e.clientX, y: e.clientY } : g))
     setOverCell(cellFromPoint(e.clientX, e.clientY))
+    // keep the page moving when the finger nears the top or bottom edge
+    const margin = 130
+    if (e.clientY < margin) window.scrollBy(0, -14)
+    else if (e.clientY > window.innerHeight - margin) window.scrollBy(0, 14)
   }
 
   const tilePointerEnd = (e: React.PointerEvent) => {
     if (e.pointerType !== 'touch') return
-    if (longPress.current !== null) { clearTimeout(longPress.current); longPress.current = null }
+    if (hold.current !== null) { clearTimeout(hold.current); hold.current = null }
     if (!touchDragging.current) return
     touchDragging.current = false
+    setGhost(null)
     justDragged.current = true
-    window.setTimeout(() => { justDragged.current = false }, 50)
+    window.setTimeout(() => { justDragged.current = false }, 80)
     const pos = e.type === 'pointercancel' ? null : cellFromPoint(e.clientX, e.clientY)
     if (pos !== null) dropOnCell(pos)
     else { setDrag(null); setOverCell(null) }
@@ -160,7 +182,10 @@ export function GridCanvas({ items, drag, setDrag, onPlace, onSwap, onRemove, on
   }
 
   return (
-    <div className="grid grid-cols-3 bg-surface-2 border border-border rounded-(--nv-radius-md) overflow-hidden">
+    <>
+    <div
+      onContextMenu={(e) => e.preventDefault()}
+      className="grid grid-cols-3 bg-surface-2 border border-border rounded-(--nv-radius-md) overflow-hidden overscroll-contain">
       {Array.from({ length: cellCount }, (_, pos) => {
         const item = byCell.get(pos)
         return (
@@ -183,16 +208,16 @@ export function GridCanvas({ items, drag, setDrag, onPlace, onSwap, onRemove, on
                 onDragStart={() => setDrag({ kind: 'cell', photoId: item.photoId })}
                 onDragEnd={() => { setDrag(null); setOverCell(null) }}
                 onPointerDown={(e) => tilePointerDown(e, item)}
-                onPointerMove={tilePointerMove}
+                onPointerMove={(e) => tilePointerMove(e, item)}
                 onPointerUp={tilePointerEnd}
                 onPointerCancel={tilePointerEnd}
                 onClick={() => { if (!justDragged.current) onOpenItem?.(item) }}
                 className={clsx(
-                  'absolute inset-0 cursor-grab active:cursor-grabbing group touch-none',
-                  drag?.photoId === item.photoId && 'opacity-50',
+                  'absolute inset-0 cursor-grab active:cursor-grabbing group touch-none select-none [-webkit-touch-callout:none]',
+                  drag?.photoId === item.photoId && 'opacity-40',
                 )}
               >
-                <img src={item.thumbUrl} alt="" className="size-full object-cover" draggable={false} />
+                <img src={item.thumbUrl} alt="" className="size-full object-cover pointer-events-none select-none" draggable={false} />
                 <span
                   role="button"
                   aria-label="Remove from grid"
@@ -219,5 +244,14 @@ export function GridCanvas({ items, drag, setDrag, onPlace, onSwap, onRemove, on
         )
       })}
     </div>
+    {/* the tile riding under the finger while touch-dragging */}
+    {ghost && (
+      <img
+        src={ghost.thumbUrl} alt="" aria-hidden
+        className="fixed z-50 size-20 rounded-(--nv-radius-md) object-cover shadow-xl ring-2 ring-(--nv-coral) pointer-events-none opacity-90"
+        style={{ left: ghost.x - 40, top: ghost.y - 48 }}
+      />
+    )}
+    </>
   )
 }
