@@ -52,5 +52,10 @@ export const config = {
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
     redirectUri: process.env.GOOGLE_REDIRECT_URI ?? 'http://localhost:4000/api/calendar/callback',
     get configured() { return Boolean(this.clientId && this.clientSecret) },
+    // Google Picker (Drive import): browser API key + the Cloud project
+    // number. Both from the same Cloud project as the OAuth client; the
+    // project number makes drive.file grants from the Picker stick.
+    pickerApiKey: process.env.GOOGLE_PICKER_API_KEY ?? '',
+    projectNumber: process.env.GOOGLE_PROJECT_NUMBER ?? '',
   },
 }

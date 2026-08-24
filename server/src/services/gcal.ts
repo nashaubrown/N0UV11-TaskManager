@@ -16,7 +16,7 @@ export function authUrl(state: string): string {
     client_id: config.google.clientId,
     redirect_uri: config.google.redirectUri,
     response_type: 'code',
-    scope: 'https://www.googleapis.com/auth/calendar.events openid email',
+    scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.file openid email',
     access_type: 'offline',
     prompt: 'consent',
     state,
@@ -63,6 +63,13 @@ async function freshAccessToken(userId: string): Promise<{ token: string; calend
     data: { access_token: data.access_token, token_expires: new Date(Date.now() + data.expires_in * 1000) },
   })
   return { token: data.access_token, calendarId: conn.calendar_id }
+}
+
+/** A fresh access token for the user's Google connection (Calendar + Drive
+ *  share one consent), or null when they haven't connected. */
+export async function googleAccessToken(userId: string): Promise<string | null> {
+  const creds = await freshAccessToken(userId).catch(() => null)
+  return creds?.token ?? null
 }
 
 /** Remove the linked Google event when a task is deleted. Called before the
