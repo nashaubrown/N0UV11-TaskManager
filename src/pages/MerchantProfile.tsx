@@ -31,7 +31,9 @@ export default function MerchantProfile() {
   const [caption, setCaption] = useState('')
   const [captionBusy, setCaptionBusy] = useState(false)
   const [error, setError] = useState<string>()
-  const [dragId, setDragId] = useState<string | null>(null)
+  const [drag, setDrag] = useState<{ kind: 'lib' | 'cell'; photoId: string } | null>(null)
+  const [overCell, setOverCell] = useState<number | null>(null)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     if (!merchantId) return
@@ -65,31 +67,70 @@ export default function MerchantProfile() {
   }, [merchantId, photos])
 
   const inPlan = useMemo(() => new Set(items.map((i) => i.photoId)), [items])
-  const tray = useMemo(
-    () => photos.filter((p) => p.merchantId === merchantId && p.approvalStatus === 'approved' && !inPlan.has(p.id)),
-    [photos, merchantId, inPlan],
-  )
+  const library = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return photos.filter(
+      (p) =>
+        p.merchantId === merchantId &&
+        p.status === 'ready' &&
+        (!q || (p.title ?? '').toLowerCase().includes(q) || p.tags.some((t) => t.tag.toLowerCase().includes(q))),
+    )
+  }, [photos, merchantId, query])
 
-  const persistOrder = (next: FeedItem[]) => {
-    setItems(next.map((i, idx) => ({ ...i, position: idx })))
-    if (!DEMO && merchantId) {
-      void api('PATCH', `/merchants/${merchantId}/feed`, { order: next.map((i) => i.photoId) }).catch(() => {})
+  /** Grid cells: at least 3×3, and a fresh row appears once the last row holds a photo. */
+  const cellCount = useMemo(() => {
+    const maxPos = items.length ? Math.max(...items.map((i) => i.position)) : -1
+    return Math.max(9, Math.ceil((maxPos + 2) / 3) * 3)
+  }, [items])
+  const byCell = useMemo(() => new Map(items.map((i) => [i.position, i])), [items])
+
+  /** Put a photo in an exact cell (replacing any occupant) — persisted immediately. */
+  const placeAt = async (photoId: string, position: number) => {
+    const p = photos.find((x) => x.id === photoId)
+    setItems((cur) => [
+      ...cur.filter((i) => i.position !== position && i.photoId !== photoId),
+      {
+        ...(cur.find((i) => i.photoId === photoId) ??
+          { photoId, title: p?.title, url: p?.url ?? '', thumbUrl: p?.thumbUrl ?? '' }),
+        position,
+      } as FeedItem,
+    ])
+    if (!DEMO) {
+      try {
+        const d = await api<{ items: FeedItem[] }>('POST', `/merchants/${merchantId}/feed`, { photoId, position })
+        setItems(d.items.map((i) => ({ ...i, url: absoluteUrl(i.url), thumbUrl: absoluteUrl(i.thumbUrl) })))
+        setError(undefined)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not save the grid')
+      }
     }
   }
 
-  const add = async (photoId: string) => {
-    if (DEMO) {
-      const p = photos.find((x) => x.id === photoId)!
-      persistOrder([{ photoId, position: 0, title: p.title, url: p.url, thumbUrl: p.thumbUrl }, ...items])
-      return
+  /** Swap two occupied cells — persisted immediately. */
+  const swapCells = async (aId: string, bId: string) => {
+    setItems((cur) => {
+      const a = cur.find((i) => i.photoId === aId)
+      const b = cur.find((i) => i.photoId === bId)
+      if (!a || !b) return cur
+      return cur.map((i) =>
+        i.photoId === aId ? { ...i, position: b.position } : i.photoId === bId ? { ...i, position: a.position } : i,
+      )
+    })
+    if (!DEMO) {
+      void api('PATCH', `/merchants/${merchantId}/feed`, { swap: [aId, bId] }).catch(() => setError('Could not save the swap'))
     }
-    try {
-      const d = await api<{ items: FeedItem[] }>('POST', `/merchants/${merchantId}/feed`, { photoId })
-      setItems(d.items.map((i) => ({ ...i, url: absoluteUrl(i.url), thumbUrl: absoluteUrl(i.thumbUrl) })))
-      setError(undefined)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not add the photo')
+  }
+
+  const dropOnCell = (position: number) => {
+    setOverCell(null)
+    if (!drag) return
+    const occupant = byCell.get(position)
+    if (drag.kind === 'cell' && occupant && occupant.photoId !== drag.photoId) {
+      void swapCells(drag.photoId, occupant.photoId)
+    } else if (!occupant || occupant.photoId !== drag.photoId) {
+      void placeAt(drag.photoId, position)
     }
+    setDrag(null)
   }
 
   const remove = async (photoId: string) => {
@@ -121,17 +162,6 @@ export default function MerchantProfile() {
     } finally {
       setCaptionBusy(false)
     }
-  }
-
-  const onDrop = (targetId: string) => {
-    if (!dragId || dragId === targetId) return
-    const next = [...items]
-    const from = next.findIndex((i) => i.photoId === dragId)
-    const to = next.findIndex((i) => i.photoId === targetId)
-    const [moved] = next.splice(from, 1)
-    next.splice(to, 0, moved)
-    persistOrder(next)
-    setDragId(null)
   }
 
   if (!merchant) {
@@ -283,18 +313,13 @@ export default function MerchantProfile() {
                     <p className="flex-1 grid place-items-center text-center text-[13px] text-neutral-500 px-6 py-10">{empty}</p>
                   ) : (
                     <div className="grid grid-cols-3 gap-px bg-white dark:bg-neutral-950">
-                      {igTab === 'grid' && items.map((item) => (
+                      {igTab === 'grid' && [...items].sort((a, b) => a.position - b.position).map((item) => (
                         <button
                           key={item.photoId}
-                          draggable
-                          onDragStart={() => setDragId(item.photoId)}
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={() => onDrop(item.photoId)}
                           onClick={() => { setOpenItem(item); setCaption(item.caption ?? '') }}
                           className={clsx(
-                            'relative overflow-hidden bg-neutral-200 cursor-grab active:cursor-grabbing',
+                            'relative overflow-hidden bg-neutral-200',
                             ratio === '1:1' ? 'aspect-square' : 'aspect-[3/4]',
-                            dragId === item.photoId && 'opacity-50',
                           )}
                           aria-label={item.title ?? 'Planned post'}
                         >
@@ -340,34 +365,107 @@ export default function MerchantProfile() {
           </div>
         </div>
 
-        {/* approved-photo tray */}
-        <Card padding="lg" className="w-full grid gap-3 content-start">
-          <div>
-            <h2 className="font-display font-semibold text-lg text-ink">Approved photos</h2>
-            <p className="text-sm text-ink-muted">Add to the plan — drag tiles on the phone to set posting order (top-left posts last).</p>
-          </div>
-          {!loaded ? null : tray.length === 0 ? (
-            <p className="text-sm text-ink-muted">
-              {items.length > 0 ? 'Every approved photo is on the plan.' : 'No approved photos for this merchant yet — approvals feed the plan.'}
-            </p>
-          ) : (
-            <div className="grid grid-cols-3 tablet:grid-cols-4 gap-2">
-              {tray.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => void add(p.id)}
-                  className="group relative aspect-square rounded-(--nv-radius-md) overflow-hidden bg-surface-2 focus-visible:outline-2 focus-visible:outline-brand"
-                  aria-label={`Add ${p.title ?? 'photo'} to the feed plan`}
-                >
-                  <img src={p.thumbUrl} alt="" className="absolute inset-0 size-full object-cover" />
-                  <span className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Plus className="size-6 text-white" aria-hidden />
-                  </span>
-                </button>
-              ))}
+        {/* grid builder + photo library */}
+        <div className="w-full grid desktop:grid-cols-[minmax(300px,420px)_1fr] gap-5 items-start">
+          {/* the 3×3 canvas — grows a row when the last one fills */}
+          <Card padding="md" className="grid gap-2.5 content-start">
+            <div>
+              <h2 className="font-display font-semibold text-lg text-ink">Grid builder</h2>
+              <p className="text-sm text-ink-muted">Drag photos from the library into a cell. Drag between cells to swap. Every move saves instantly.</p>
             </div>
-          )}
-        </Card>
+            <div className="grid grid-cols-3 bg-surface-2 border border-border rounded-(--nv-radius-md) overflow-hidden">
+              {Array.from({ length: cellCount }, (_, pos) => {
+                const item = byCell.get(pos)
+                return (
+                  <div
+                    key={pos}
+                    onDragOver={(e) => { e.preventDefault(); setOverCell(pos) }}
+                    onDragLeave={() => setOverCell((c) => (c === pos ? null : c))}
+                    onDrop={(e) => { e.preventDefault(); dropOnCell(pos) }}
+                    className={clsx(
+                      'relative aspect-square',
+                      overCell === pos && 'outline-2 outline-dashed outline-(--nv-coral) -outline-offset-2 z-10',
+                      !item && 'bg-surface-2',
+                    )}
+                    aria-label={item ? item.title ?? 'Grid photo' : `Empty cell ${pos + 1}`}
+                  >
+                    {item ? (
+                      <button
+                        draggable
+                        onDragStart={() => setDrag({ kind: 'cell', photoId: item.photoId })}
+                        onDragEnd={() => { setDrag(null); setOverCell(null) }}
+                        onClick={() => { setOpenItem(item); setCaption(item.caption ?? '') }}
+                        className={clsx(
+                          'absolute inset-0 cursor-grab active:cursor-grabbing group',
+                          drag?.photoId === item.photoId && 'opacity-50',
+                        )}
+                      >
+                        <img src={item.thumbUrl} alt="" className="size-full object-cover" draggable={false} />
+                        <span
+                          role="button"
+                          aria-label="Remove from grid"
+                          onClick={(e) => { e.stopPropagation(); void remove(item.photoId) }}
+                          className="absolute top-1 right-1 size-5 rounded-full bg-black/55 text-white hidden group-hover:flex items-center justify-center text-[11px]"
+                        >
+                          ✕
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="absolute inset-1 rounded-(--nv-radius-sm) border border-dashed border-border flex items-center justify-center text-ink-faint">
+                        <Plus className="size-4" aria-hidden />
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <p className="text-xs text-ink-muted">Top-left posts last, like Instagram. The phone preview mirrors this grid.</p>
+          </Card>
+
+          {/* the library to drag from */}
+          <Card padding="md" className="grid gap-3 content-start">
+            <div>
+              <h2 className="font-display font-semibold text-lg text-ink">Photo library</h2>
+              <p className="text-sm text-ink-muted">{merchant.name}'s photos — drag any of them onto the grid.</p>
+            </div>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search photos…"
+              aria-label="Search photos"
+              className="h-9 rounded-(--nv-radius-md) border border-border bg-surface text-ink placeholder:text-ink-faint px-3 text-sm
+                         focus:border-brand focus:outline-none"
+            />
+            {!loaded ? null : library.length === 0 ? (
+              <p className="text-sm text-ink-muted">No photos match — upload some in the Photo Library and assign them to {merchant.name}.</p>
+            ) : (
+              <div className="grid grid-cols-3 tablet:grid-cols-4 desktop:grid-cols-5 gap-1.5 max-h-[520px] overflow-y-auto pr-1">
+                {library.map((p) => {
+                  const used = inPlan.has(p.id)
+                  return (
+                    <div
+                      key={p.id}
+                      draggable
+                      onDragStart={() => setDrag({ kind: 'lib', photoId: p.id })}
+                      onDragEnd={() => { setDrag(null); setOverCell(null) }}
+                      title={p.title}
+                      className={clsx(
+                        'relative aspect-square rounded-(--nv-radius-sm) overflow-hidden bg-surface-2 cursor-grab active:cursor-grabbing',
+                        used && 'opacity-45',
+                        drag?.photoId === p.id && 'opacity-40',
+                      )}
+                    >
+                      <img src={p.thumbUrl} alt={p.title ?? 'Photo'} className="absolute inset-0 size-full object-cover" draggable={false} />
+                      {used && (
+                        <span className="absolute bottom-1 right-1 size-4 rounded-full nv-gradient text-white text-[10px] flex items-center justify-center">✓</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
 
       {/* post detail: caption editor + AI + remove */}
