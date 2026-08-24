@@ -122,18 +122,41 @@ export interface TaskLabel {
   color: string
 }
 
+export interface TaskList {
+  id: string
+  merchantId?: string
+  name: string
+  position: number
+  fields: { id: string; name: string }[]
+  taskCount: number
+}
+
+export interface ChecklistItem {
+  id: string
+  label: string
+  done: boolean
+}
+
 export interface Task {
   id: string
   projectId?: string
+  listId?: string
   parentTaskId?: string
   title: string
   description?: string
   status: TaskStatus
   priority: TaskPriority
+  startsAt?: string
   dueAt?: string
   completedAt?: string
+  estimateMinutes?: number
   assignees: User[]
   labels: TaskLabel[]
+  fieldValues?: { fieldId: string; value: string }[]
+  checklist?: ChecklistItem[]
+  attachmentIds?: string[]
+  trackedSeconds?: number
+  runningEntry?: { userId: string; startedAt: string }
   subtaskCount: number
   subtaskDoneCount: number
   commentCount: number

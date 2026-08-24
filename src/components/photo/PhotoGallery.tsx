@@ -4,10 +4,12 @@ import { PhotoCard } from './PhotoCard'
 import { EmptyState } from '../common/EmptyState'
 import { useUi } from '../../store/ui'
 
-export function PhotoGallery({ photos, onOpen, selectable = true }: {
+export function PhotoGallery({ photos, onOpen, selectable = true, large = false }: {
   photos: Photo[]
   onOpen?: (photo: Photo) => void
   selectable?: boolean
+  /** fewer columns → bigger tiles */
+  large?: boolean
 }) {
   const { selectedPhotoIds, togglePhotoSelection } = useUi()
 
@@ -22,7 +24,9 @@ export function PhotoGallery({ photos, onOpen, selectable = true }: {
   }
 
   return (
-    <div className="grid gap-3 grid-cols-2 tablet:grid-cols-3 desktop:grid-cols-4 wide:grid-cols-5">
+    <div className={large
+      ? 'grid gap-3 grid-cols-2 tablet:grid-cols-2 desktop:grid-cols-3 wide:grid-cols-4'
+      : 'grid gap-3 grid-cols-2 tablet:grid-cols-3 desktop:grid-cols-4 wide:grid-cols-5'}>
       {photos.map((p) => (
         <PhotoCard
           key={p.id}

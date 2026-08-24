@@ -15,6 +15,7 @@ export type EventType =
   | 'comment.created'
   | 'approval.updated'
   | 'shoot.created' | 'shoot.updated' | 'shoot.deleted'
+  | 'list.created' | 'list.updated' | 'list.deleted'
   | 'presence.changed'
 
 export function broadcast(organizationId: string, type: EventType, payload: unknown) {

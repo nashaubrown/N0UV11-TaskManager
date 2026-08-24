@@ -12,7 +12,7 @@ import {
   projects as seedProjects,
   tasks as seedTasks,
 } from '../mocks/data'
-import type { ApprovalRequest, Capability, CommentModel, Contact, Deal, DealStage, Member, Merchant, OrgRole, Photo, Project, Shoot, Task } from '../types'
+import type { ApprovalRequest, Capability, CommentModel, Contact, Deal, DealStage, Member, Merchant, OrgRole, Photo, Project, Shoot, Task, TaskList } from '../types'
 import { ROLE_CAPABILITIES } from '../types'
 import { api, absoluteUrl, DEMO, putBytes } from '../services/api'
 import { enqueueUpload, flushQueue } from '../services/offlineQueue'
@@ -57,8 +57,18 @@ export interface NewTaskInput {
   description?: string
   status: Task['status']
   priority: Task['priority']
+  startsAt?: string
   dueAt?: string
   projectId?: string
+  listId?: string
+  estimateMinutes?: number
+}
+
+export type TaskPatch = Omit<Partial<Task> & Partial<NewTaskInput>, 'startsAt' | 'dueAt' | 'estimateMinutes'> & {
+  startsAt?: string | null
+  dueAt?: string | null
+  estimateMinutes?: number | null
+  fieldValues?: { fieldId: string; value: string }[]
 }
 
 interface Paged<T> { items: T[] }
@@ -77,10 +87,20 @@ interface DataState {
   deals: Deal[]
   contacts: Contact[]
   members: Member[]
+  lists: TaskList[]
   hydrate: () => Promise<void>
   addProject: (input: { name: string; description?: string }) => Promise<Project>
   addTask: (input: NewTaskInput) => Promise<Task>
-  updateTask: (id: string, patch: Partial<Task> & Partial<NewTaskInput>) => Promise<void>
+  updateTask: (id: string, patch: TaskPatch) => Promise<void>
+  deleteTask: (id: string) => Promise<void>
+  addList: (input: { name: string; merchantId?: string }) => Promise<TaskList>
+  renameList: (id: string, name: string) => Promise<void>
+  deleteList: (id: string) => Promise<void>
+  addListField: (listId: string, name: string) => Promise<void>
+  deleteListField: (listId: string, fieldId: string) => Promise<void>
+  taskChecklist: (taskId: string, op: { add?: string; toggle?: string; remove?: string }) => Promise<void>
+  taskAttachment: (taskId: string, op: { add?: string; remove?: string }) => Promise<void>
+  taskTimer: (taskId: string, action: 'start' | 'stop') => Promise<void>
   addPhotos: (files: File[], opts?: { projectId?: string; merchantId?: string }) => Promise<void>
   addComment: (target: { taskId?: string; photoId?: string }, body: string) => Promise<void>
   addShoot: (input: NewShootInput) => Promise<Shoot>
@@ -115,15 +135,32 @@ export const useData = create<DataState>((set, get) => ({
   deals: [],
   contacts: [],
   members: [],
+  lists: [],
 
   hydrate: async () => {
     if (get().hydrated) return
     if (DEMO) {
+      // demo workspace: a couple of monthly lists per merchant, tasks spread across them
+      const demoLists: TaskList[] = seedMerchants.slice(0, 3).flatMap((m, mi) =>
+        ['July 2026', 'August 2026'].map((name, li) => ({
+          id: `list-${mi}-${li}`,
+          merchantId: m.id,
+          name,
+          position: li,
+          fields: li === 0 ? [{ id: `f-${mi}-client`, name: 'Deliverable' }] : [],
+          taskCount: 0,
+        })),
+      )
       set({
         hydrated: true,
+        lists: demoLists,
         merchants: seedMerchants,
         projects: seedProjects,
-        tasks: seedTasks.map((t) => ({ ...t, commentCount: threadCount(seedComments, (c) => c.taskId === t.id) })),
+        tasks: seedTasks.map((t, i) => ({
+          ...t,
+          listId: demoLists[i % demoLists.length]?.id,
+          commentCount: threadCount(seedComments, (c) => c.taskId === t.id),
+        })),
         photos: seedPhotos.map((p) => ({ ...p, commentCount: threadCount(seedComments, (c) => c.photoId === p.id) })),
         comments: seedComments,
         approvals: seedApprovals,
@@ -135,9 +172,9 @@ export const useData = create<DataState>((set, get) => ({
       return
     }
     try {
-      const [projects, tasks, photos, merchants, approvals, shoots, deals, contacts, members] = await Promise.all([
+      const [projects, tasks, photos, merchants, approvals, shoots, deals, contacts, members, lists] = await Promise.all([
         api<Paged<Project>>('GET', '/projects?limit=100'),
-        api<Paged<Task>>('GET', '/tasks?limit=100'),
+        api<Paged<Task>>('GET', '/tasks?limit=200'),
         api<Paged<Photo>>('GET', '/photos?limit=100'),
         api<Paged<Merchant>>('GET', '/merchants'),
         api<Paged<ApprovalRequest>>('GET', '/approvals?limit=100'),
@@ -145,12 +182,14 @@ export const useData = create<DataState>((set, get) => ({
         api<Paged<Deal>>('GET', '/deals?limit=100'),
         api<Paged<Contact>>('GET', '/contacts?limit=100'),
         api<Paged<Member>>('GET', '/org/members'),
+        api<Paged<TaskList>>('GET', '/lists'),
       ])
       set({
         hydrated: true,
         loadError: undefined,
         projects: projects.items,
         tasks: tasks.items,
+        lists: lists.items,
         photos: photos.items.map(mapPhoto),
         merchants: merchants.items,
         approvals: approvals.items,
@@ -208,12 +247,16 @@ export const useData = create<DataState>((set, get) => ({
   updateTask: async (id, patch) => {
     if (DEMO) {
       const picked = patch.assigneeIds ? get().members.filter((m) => patch.assigneeIds!.includes(m.id)) : undefined
+      // demo store keeps Task-shaped fields — nulls mean "cleared"
+      const demoPatch = Object.fromEntries(
+        Object.entries(patch).map(([k, v]) => [k, v === null ? undefined : v]),
+      ) as Partial<Task>
       set((s) => ({
         tasks: s.tasks.map((t) =>
           t.id === id
             ? {
                 ...t,
-                ...patch,
+                ...demoPatch,
                 ...(picked ? { assignees: picked } : {}),
                 completedAt:
                   patch.status === 'completed' && t.status !== 'completed'
@@ -229,6 +272,116 @@ export const useData = create<DataState>((set, get) => ({
     }
     const task = await api<Task>('PATCH', `/tasks/${id}`, patch)
     set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? task : t)) }))
+  },
+
+  deleteTask: async (id) => {
+    if (!DEMO) await api('DELETE', `/tasks/${id}`)
+    set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }))
+  },
+
+  addList: async (input) => {
+    if (DEMO) {
+      const list: TaskList = { id: `list${Date.now()}`, merchantId: input.merchantId, name: input.name, position: 0, fields: [], taskCount: 0 }
+      set((s) => ({ lists: [...s.lists, list] }))
+      return list
+    }
+    const list = await api<TaskList>('POST', '/lists', input)
+    set((s) => (s.lists.some((l) => l.id === list.id) ? s : { lists: [...s.lists, list] }))
+    return list
+  },
+
+  renameList: async (id, name) => {
+    if (!DEMO) await api('PATCH', `/lists/${id}`, { name })
+    set((s) => ({ lists: s.lists.map((l) => (l.id === id ? { ...l, name } : l)) }))
+  },
+
+  deleteList: async (id) => {
+    if (!DEMO) await api('DELETE', `/lists/${id}`)
+    set((s) => ({
+      lists: s.lists.filter((l) => l.id !== id),
+      tasks: s.tasks.map((t) => (t.listId === id ? { ...t, listId: undefined } : t)),
+    }))
+  },
+
+  addListField: async (listId, name) => {
+    if (DEMO) {
+      set((s) => ({
+        lists: s.lists.map((l) => (l.id === listId ? { ...l, fields: [...l.fields, { id: `f${Date.now()}`, name }] } : l)),
+      }))
+      return
+    }
+    const list = await api<TaskList>('POST', `/lists/${listId}/fields`, { name })
+    set((s) => ({ lists: s.lists.map((l) => (l.id === listId ? list : l)) }))
+  },
+
+  deleteListField: async (listId, fieldId) => {
+    if (DEMO) {
+      set((s) => ({
+        lists: s.lists.map((l) => (l.id === listId ? { ...l, fields: l.fields.filter((f) => f.id !== fieldId) } : l)),
+      }))
+      return
+    }
+    const list = await api<TaskList>('DELETE', `/lists/${listId}/fields/${fieldId}`)
+    set((s) => ({ lists: s.lists.map((l) => (l.id === listId ? list : l)) }))
+  },
+
+  taskChecklist: async (taskId, op) => {
+    if (DEMO) {
+      set((s) => ({
+        tasks: s.tasks.map((t) => {
+          if (t.id !== taskId) return t
+          let checklist = t.checklist ?? []
+          if (op.add) checklist = [...checklist, { id: `c${Date.now()}`, label: op.add, done: false }]
+          if (op.toggle) checklist = checklist.map((c) => (c.id === op.toggle ? { ...c, done: !c.done } : c))
+          if (op.remove) checklist = checklist.filter((c) => c.id !== op.remove)
+          return { ...t, checklist }
+        }),
+      }))
+      return
+    }
+    let task: Task
+    if (op.add) task = await api<Task>('POST', `/tasks/${taskId}/checklist`, { label: op.add })
+    else if (op.toggle) {
+      const done = get().tasks.find((t) => t.id === taskId)?.checklist?.find((c) => c.id === op.toggle)?.done
+      task = await api<Task>('PATCH', `/tasks/${taskId}/checklist/${op.toggle}`, { done: !done })
+    } else if (op.remove) task = await api<Task>('DELETE', `/tasks/${taskId}/checklist/${op.remove}`)
+    else return
+    set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? task : t)) }))
+  },
+
+  taskAttachment: async (taskId, op) => {
+    if (DEMO) {
+      set((s) => ({
+        tasks: s.tasks.map((t) => {
+          if (t.id !== taskId) return t
+          let ids = t.attachmentIds ?? []
+          if (op.add && !ids.includes(op.add)) ids = [...ids, op.add]
+          if (op.remove) ids = ids.filter((x) => x !== op.remove)
+          return { ...t, attachmentIds: ids }
+        }),
+      }))
+      return
+    }
+    const task = op.add
+      ? await api<Task>('POST', `/tasks/${taskId}/attachments`, { photoId: op.add })
+      : await api<Task>('DELETE', `/tasks/${taskId}/attachments/${op.remove}`)
+    set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? task : t)) }))
+  },
+
+  taskTimer: async (taskId, action) => {
+    if (DEMO) {
+      set((s) => ({
+        tasks: s.tasks.map((t) => {
+          if (t.id !== taskId) return t
+          if (action === 'start') return { ...t, runningEntry: { userId: currentUser.id, startedAt: new Date().toISOString() } }
+          const ran = t.runningEntry ? Math.round((Date.now() - new Date(t.runningEntry.startedAt).getTime()) / 1000) : 0
+          return { ...t, runningEntry: undefined, trackedSeconds: (t.trackedSeconds ?? 0) + ran }
+        }),
+      }))
+      return
+    }
+    const task = await api<Task>('POST', `/tasks/${taskId}/time/${action}`)
+    set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? task : t)) }))
   },
 
   addPhotos: async (files, opts) => {
@@ -500,6 +653,15 @@ export const useData = create<DataState>((set, get) => ({
     switch (type) {
       case 'task.created':
         set((s) => (s.tasks.some((t) => t.id === p.id) ? s : { tasks: [p, ...s.tasks] }))
+        break
+      case 'list.created':
+        set((s) => (s.lists.some((l) => l.id === p.id) ? s : { lists: [...s.lists, p] }))
+        break
+      case 'list.updated':
+        set((s) => ({ lists: s.lists.map((l) => (l.id === p.id ? p : l)) }))
+        break
+      case 'list.deleted':
+        set((s) => ({ lists: s.lists.filter((l) => l.id !== p.id) }))
         break
       case 'task.updated':
         if (Array.isArray(p.taskIds)) {
