@@ -4,7 +4,7 @@ import { Header } from './Header'
 import { MobileTabBar, Sidebar } from './Sidebar'
 
 /** Wide, tool-like pages get the full viewport; content pages stay centered. */
-const FULL_WIDTH = ['/photos', '/projects']
+const FULL_WIDTH = ['/photos', '/projects', '/tasks']
 
 export function AppShell() {
   const { pathname } = useLocation()

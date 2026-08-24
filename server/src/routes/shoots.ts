@@ -12,6 +12,51 @@ import { param } from '../lib/params.js'
 import { audit } from '../services/audit.js'
 import { broadcast } from '../ws/hub.js'
 import { deleteShootEvents, syncShootToCalendars } from '../services/gcal.js'
+import { taskInclude } from './tasks.js'
+import { sTask } from '../lib/serialize.js'
+
+/** Keep the shoot's auto "📸" task in its list in sync: created when the
+ *  shoot has a list, follows title/dates/status, removed when unlinked. */
+async function syncLinkedTask(shootId: string, orgId: string, userId: string) {
+  try {
+    const shoot = await prisma.photoshoots.findUnique({ where: { id: shootId } })
+    if (!shoot) return
+    if (!shoot.list_id) {
+      if (shoot.linked_task_id) {
+        const oldId = shoot.linked_task_id
+        await prisma.photoshoots.update({ where: { id: shoot.id }, data: { linked_task_id: null } })
+        await prisma.tasks.delete({ where: { id: oldId } }).catch(() => {})
+        broadcast(orgId, 'task.deleted', { id: oldId })
+      }
+      return
+    }
+    const status = shoot.status === 'completed' ? 'completed' : shoot.status === 'cancelled' ? 'cancelled' : 'todo'
+    const data = {
+      title: `📸 ${shoot.title}`,
+      list_id: shoot.list_id,
+      starts_at: shoot.starts_at,
+      due_at: shoot.ends_at,
+      status: status as never,
+      completed_at: status === 'completed' ? new Date() : null,
+    }
+    if (shoot.linked_task_id) {
+      const existing = await prisma.tasks.findUnique({ where: { id: shoot.linked_task_id } })
+      if (existing) {
+        const task = await prisma.tasks.update({ where: { id: existing.id }, data, include: taskInclude })
+        broadcast(orgId, 'task.updated', sTask(task))
+        return
+      }
+    }
+    const task = await prisma.tasks.create({
+      data: { organization_id: orgId, created_by: userId, ...data },
+      include: taskInclude,
+    })
+    await prisma.photoshoots.update({ where: { id: shoot.id }, data: { linked_task_id: task.id } })
+    broadcast(orgId, 'task.created', sTask(task))
+  } catch (e) {
+    console.error('shoot linked-task sync failed', e)
+  }
+}
 
 export const shootsRouter = Router()
 shootsRouter.use(requireAuth)
@@ -61,6 +106,7 @@ shootsRouter.post('/', requireCapability('calendar.manage'), validate(createShoo
       starts_at: new Date(b.startsAt),
       ends_at: new Date(b.endsAt),
       status: b.status,
+      list_id: b.listId,
       created_by: req.auth!.userId,
       shoot_crew: { create: b.crewIds.map((user_id: string) => ({ user_id })) },
     },
@@ -70,6 +116,7 @@ shootsRouter.post('/', requireCapability('calendar.manage'), validate(createShoo
   audit(req, 'shoot.create', 'photoshoot', shoot.id, { title: shoot.title, status: shoot.status })
   broadcast(req.auth!.organizationId, 'shoot.created', out)
   void syncShootToCalendars(shoot.id, req.auth!.userId)
+  void syncLinkedTask(shoot.id, req.auth!.organizationId, req.auth!.userId)
   res.status(201).json(out)
 })
 
@@ -93,6 +140,7 @@ shootsRouter.patch('/:id', requireCapability('calendar.manage'), validate(update
       status: b.status,
       project_id: b.projectId,
       merchant_id: b.merchantId,
+      list_id: b.listId === undefined ? undefined : b.listId,
       ...(b.crewIds
         ? { shoot_crew: { deleteMany: {}, create: b.crewIds.map((user_id: string) => ({ user_id })) } }
         : {}),
@@ -107,13 +155,18 @@ shootsRouter.patch('/:id', requireCapability('calendar.manage'), validate(update
   }
   broadcast(req.auth!.organizationId, 'shoot.updated', out)
   void syncShootToCalendars(shoot.id, req.auth!.userId)
+  void syncLinkedTask(shoot.id, req.auth!.organizationId, req.auth!.userId)
   res.json(out)
 })
 
 /** DELETE /shoots/:id */
 shootsRouter.delete('/:id', requireCapability('calendar.manage'), async (req, res) => {
-  await loadShoot(req.auth!.organizationId, param(req, 'id'))
+  const doomed = await loadShoot(req.auth!.organizationId, param(req, 'id'))
   await deleteShootEvents(param(req, 'id'))
+  if (doomed.linked_task_id) {
+    await prisma.tasks.delete({ where: { id: doomed.linked_task_id } }).catch(() => {})
+    broadcast(req.auth!.organizationId, 'task.deleted', { id: doomed.linked_task_id })
+  }
   await prisma.photoshoots.delete({ where: { id: param(req, 'id') } })
   audit(req, 'shoot.delete', 'photoshoot', param(req, 'id'))
   broadcast(req.auth!.organizationId, 'shoot.deleted', { id: param(req, 'id') })

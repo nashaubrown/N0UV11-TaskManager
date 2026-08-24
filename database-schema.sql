@@ -349,6 +349,8 @@ CREATE TABLE photoshoots (
   status          shoot_status NOT NULL DEFAULT 'planning',
   created_by      UUID REFERENCES users(id),
   gcal_synced_at  TIMESTAMPTZ,
+  list_id         UUID,             -- FK to task_lists added in later migration section
+  linked_task_id  UUID,             -- auto-synced workspace task
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (ends_at > starts_at)
@@ -636,3 +638,9 @@ CREATE TABLE task_dependencies (
   PRIMARY KEY (task_id, depends_on_task_id),
   CHECK (task_id <> depends_on_task_id)
 );
+
+-- late FKs for photoshoots workspace columns (task_lists is created above)
+ALTER TABLE photoshoots
+  ADD CONSTRAINT photoshoots_list_fk FOREIGN KEY (list_id) REFERENCES task_lists(id) ON DELETE SET NULL;
+ALTER TABLE photoshoots
+  ADD CONSTRAINT photoshoots_linked_task_fk FOREIGN KEY (linked_task_id) REFERENCES tasks(id) ON DELETE SET NULL;

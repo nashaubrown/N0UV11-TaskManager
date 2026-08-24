@@ -6,7 +6,7 @@ import {
 } from 'date-fns'
 import {
   CalendarDays, ChartNoAxesGantt, ChevronDown, ChevronLeft, ChevronRight, Columns3, Flag, FolderOpen,
-  ListTodo, MoreHorizontal, Plus, SlidersHorizontal, Store,
+  Inbox, ListTodo, MoreHorizontal, Plus, SlidersHorizontal, Store,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { Avatar } from '../components/common/Avatar'
@@ -15,7 +15,7 @@ import { Button } from '../components/common/Button'
 import { EmptyState } from '../components/common/EmptyState'
 import { TaskPanel } from '../components/task/TaskPanel'
 import { useData } from '../store/data'
-import { TASK_PRIORITY_META, TASK_STATUS_META, type Task, type TaskList, type TaskStatus } from '../types'
+import { TASK_PRIORITY_META, TASK_STATUS_META, type Shoot, type Task, type TaskList, type TaskStatus } from '../types'
 
 /* ClickUp-style workspace: merchant folders → lists → tasks, with List /
  * Board / Calendar / Gantt views and a docked task panel. */
@@ -28,12 +28,16 @@ const PRIORITY_COLOR: Record<Task['priority'], string> = {
 
 const dueLabel = (iso?: string) => (iso ? format(new Date(iso), 'MMM d') : '')
 
+/** Virtual list for tasks that aren't filed into any list yet. */
+const UNFILED: TaskList = { id: 'unfiled', name: 'Unfiled tasks', position: 0, fields: [], taskCount: 0 }
+
 export default function Workspace() {
-  const { merchants, lists, tasks, addList, renameList, deleteList, addListField, deleteListField, addTask, updateTask } = useData()
+  const { merchants, lists, tasks, shoots, addList, renameList, deleteList, addListField, deleteListField, addTask, updateTask } = useData()
   const [params, setParams] = useSearchParams()
   const listId = params.get('list') ?? ''
   const view = (params.get('view') as View) ?? 'list'
-  const selected = lists.find((l) => l.id === listId)
+  const isUnfiled = listId === UNFILED.id
+  const selected = isUnfiled ? UNFILED : lists.find((l) => l.id === listId)
   const merchant = merchants.find((m) => m.id === selected?.merchantId)
 
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
@@ -55,10 +59,15 @@ export default function Workspace() {
   }
 
   const listTasks = useMemo(
-    () => tasks.filter((t) => t.listId === listId && !t.parentTaskId),
-    [tasks, listId],
+    () => tasks.filter((t) => (isUnfiled ? !t.listId : t.listId === listId) && !t.parentTaskId),
+    [tasks, listId, isUnfiled],
+  )
+  const listShoots = useMemo(
+    () => (isUnfiled ? [] : shoots.filter((s) => s.listId === listId)),
+    [shoots, listId, isUnfiled],
   )
   const countFor = (l: TaskList) => tasks.filter((t) => t.listId === l.id && !t.parentTaskId).length
+  const unfiledCount = tasks.filter((t) => !t.listId && !t.parentTaskId).length
 
   const toggleFolder = (id: string) =>
     setClosedFolders((cur) => { const next = new Set(cur); next.has(id) ? next.delete(id) : next.add(id); return next })
@@ -126,6 +135,17 @@ export default function Workspace() {
             )}
           </div>
         ))}
+        <button
+          onClick={() => setParam('list', UNFILED.id)}
+          className={clsx(
+            'w-full flex items-center gap-2 px-3 py-1.5 mt-1 text-sm text-left border-t border-border/60 pt-2.5',
+            isUnfiled ? 'bg-coral/10 text-ink font-medium border-r-2 border-r-(--nv-coral)' : 'text-ink-muted hover:bg-surface-2',
+          )}
+        >
+          <Inbox className="size-3.5 shrink-0" aria-hidden />
+          <span className="truncate flex-1">Unfiled tasks</span>
+          <span className="text-xs tabular-nums text-ink-faint">{unfiledCount}</span>
+        </button>
       </nav>
 
       {/* main */}
@@ -139,7 +159,7 @@ export default function Workspace() {
             {/* header: breadcrumb + views + toolbar */}
             <div className="border-b border-border px-4 pt-3">
               <div className="flex items-center gap-2 text-sm text-ink-muted">
-                <span>{merchant?.name ?? 'Unfiled'}</span>
+                <span>{isUnfiled ? 'Workspace' : merchant?.name ?? 'Unfiled'}</span>
                 <span>/</span>
                 {renaming ? (
                   <form onSubmit={(e) => { e.preventDefault(); if (renameDraft.trim()) void renameList(selected.id, renameDraft.trim()); setRenaming(false) }}>
@@ -150,7 +170,7 @@ export default function Workspace() {
                 ) : (
                   <span className="font-display font-semibold text-lg text-ink">{selected.name}</span>
                 )}
-                <div className="relative">
+                {!isUnfiled && <div className="relative">
                   <Button variant="ghost" size="sm" aria-label="List menu" icon={<MoreHorizontal className="size-4" />} onClick={() => setMenuOpen((o) => !o)} />
                   {menuOpen && (
                     <div className="absolute z-20 mt-1 w-40 rounded-(--nv-radius-md) border border-border bg-surface shadow-lg py-1 text-sm">
@@ -170,9 +190,9 @@ export default function Workspace() {
                       )}
                     </div>
                   )}
-                </div>
+                </div>}
                 <span className="flex-1" />
-                <div className="relative">
+                {!isUnfiled && <div className="relative">
                   <Button variant="ghost" size="sm" icon={<SlidersHorizontal className="size-4" />} onClick={() => setFieldsOpen((o) => !o)}>
                     Fields
                   </Button>
@@ -196,7 +216,7 @@ export default function Workspace() {
                       </form>
                     </div>
                   )}
-                </div>
+                </div>}
               </div>
               <div className="flex gap-1 mt-2" role="tablist" aria-label="Views">
                 {([['list', ListTodo, 'List'], ['board', Columns3, 'Board'], ['calendar', CalendarDays, 'Calendar'], ['gantt', ChartNoAxesGantt, 'Gantt']] as const).map(([v, Icon, label]) => (
@@ -210,15 +230,15 @@ export default function Workspace() {
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              {view === 'list' && <ListView tasks={listTasks} list={selected} onOpen={setOpenTaskId} onAdd={(title, status) => void addTask({ title, status, priority: 'medium', listId: selected.id })} />}
+              {view === 'list' && <ListView tasks={listTasks} list={selected} onOpen={setOpenTaskId} onAdd={(title, status) => void addTask({ title, status, priority: 'medium', listId: isUnfiled ? undefined : selected.id })} />}
               {view === 'board' && <BoardView tasks={listTasks} onOpen={setOpenTaskId} onMove={(id, status) => void updateTask(id, { status })} />}
-              {view === 'calendar' && <CalendarView tasks={listTasks} onOpen={setOpenTaskId} onReschedule={(id, day) => {
+              {view === 'calendar' && <CalendarView tasks={listTasks} shoots={listShoots} onOpen={setOpenTaskId} onReschedule={(id, day) => {
                 const t = listTasks.find((x) => x.id === id)
                 const prev = t?.dueAt ? new Date(t.dueAt) : new Date()
                 const next = new Date(day); next.setHours(prev.getHours(), prev.getMinutes())
                 void updateTask(id, { dueAt: next.toISOString() })
               }} />}
-              {view === 'gantt' && <GanttView tasks={listTasks} onOpen={setOpenTaskId} />}
+              {view === 'gantt' && <GanttView tasks={listTasks} shoots={listShoots} onOpen={setOpenTaskId} />}
             </div>
           </>
         )}
@@ -336,10 +356,13 @@ function BoardView({ tasks, onOpen, onMove }: { tasks: Task[]; onOpen: (id: stri
 
 /* ---------- Calendar view ---------- */
 
-function CalendarView({ tasks, onOpen, onReschedule }: { tasks: Task[]; onOpen: (id: string) => void; onReschedule: (id: string, day: Date) => void }) {
+function CalendarView({ tasks, shoots = [], onOpen, onReschedule }: { tasks: Task[]; shoots?: Shoot[]; onOpen: (id: string) => void; onReschedule: (id: string, day: Date) => void }) {
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
   const [dragId, setDragId] = useState<string | null>(null)
   const days = eachDayOfInterval({ start: startOfWeek(startOfMonth(month)), end: endOfWeek(endOfMonth(month)) })
+  // the shoot chip already stands in for its synced "📸" task — don't show both
+  const shootTitles = new Set(shoots.map((s) => `📸 ${s.title}`))
+  const visible = tasks.filter((t) => !shootTitles.has(t.title))
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-2">
@@ -362,7 +385,14 @@ function CalendarView({ tasks, onOpen, onReschedule }: { tasks: Task[]; onOpen: 
                  isSameMonth(day, month) ? 'border-border bg-surface' : 'border-transparent bg-surface-2/40',
                  isSameDay(day, new Date()) && 'outline-2 outline-(--nv-coral)/40')}>
             <span className="text-[11px] tabular-nums text-ink-muted">{format(day, 'd')}</span>
-            {tasks.filter((t) => t.dueAt && isSameDay(new Date(t.dueAt), day)).map((t) => (
+            {shoots.filter((s) => isSameDay(new Date(s.startsAt), day)).map((s) => (
+              <div key={s.id} title={`Photoshoot · ${s.title} — managed from the Calendar page`}
+                   className={clsx('text-left text-[11px] rounded px-1.5 py-0.5 truncate border',
+                     s.status === 'cancelled' ? 'bg-surface-2 text-ink-faint border-border line-through' : 'bg-info-bg text-info border-info/30')}>
+                📸 {s.title}
+              </div>
+            ))}
+            {visible.filter((t) => t.dueAt && isSameDay(new Date(t.dueAt), day)).map((t) => (
               <button key={t.id} draggable
                       onDragStart={() => setDragId(t.id)} onDragEnd={() => setDragId(null)}
                       onClick={() => onOpen(t.id)}
@@ -381,14 +411,15 @@ function CalendarView({ tasks, onOpen, onReschedule }: { tasks: Task[]; onOpen: 
 
 /* ---------- Gantt view ---------- */
 
-function GanttView({ tasks, onOpen }: { tasks: Task[]; onOpen: (id: string) => void }) {
-  const dated = tasks.filter((t) => t.dueAt || t.startsAt)
-  if (!dated.length) {
+function GanttView({ tasks, shoots = [], onOpen }: { tasks: Task[]; shoots?: Shoot[]; onOpen: (id: string) => void }) {
+  const shootTitles = new Set(shoots.map((s) => `📸 ${s.title}`))
+  const dated = tasks.filter((t) => (t.dueAt || t.startsAt) && !shootTitles.has(t.title))
+  if (!dated.length && !shoots.length) {
     return <p className="p-8 text-sm text-ink-muted text-center">No dated tasks yet — give tasks a start or due date and they appear on the timeline.</p>
   }
   const DAY = 30
-  const starts = dated.map((t) => new Date(t.startsAt ?? t.dueAt!))
-  const ends = dated.map((t) => new Date(t.dueAt ?? t.startsAt!))
+  const starts = [...dated.map((t) => new Date(t.startsAt ?? t.dueAt!)), ...shoots.map((s) => new Date(s.startsAt))]
+  const ends = [...dated.map((t) => new Date(t.dueAt ?? t.startsAt!)), ...shoots.map((s) => new Date(s.endsAt))]
   const min = new Date(Math.min(...starts.map(Number)))
   min.setDate(min.getDate() - 2)
   const max = new Date(Math.max(...ends.map(Number)))
@@ -410,6 +441,30 @@ function GanttView({ tasks, onOpen }: { tasks: Task[]; onOpen: (id: string) => v
             ))}
           </div>
         </div>
+        {shoots.map((sh) => {
+          const s = new Date(sh.startsAt)
+          const e = new Date(sh.endsAt)
+          const x = Math.max(0, differenceInCalendarDays(s, min)) * DAY
+          const w = Math.max(1, differenceInCalendarDays(e, s) + 1) * DAY - 6
+          return (
+            <div key={sh.id} className="grid items-center h-9" style={{ gridTemplateColumns: `220px ${days.length * DAY}px` }}>
+              <span className="text-sm text-ink-2 truncate pr-3">📸 {sh.title}</span>
+              <div className="relative h-6 border-t border-border/40">
+                {todayX >= 0 && todayX < days.length && (
+                  <span className="absolute top-0 bottom-0 w-px bg-error/60" style={{ left: todayX * DAY }} aria-hidden />
+                )}
+                <span
+                  className={clsx('absolute top-0.5 h-5 rounded-full text-[10px] px-2 truncate',
+                    sh.status === 'completed' ? 'bg-success text-white' : sh.status === 'cancelled' ? 'bg-surface-2 text-ink-faint line-through' : 'bg-info text-white')}
+                  style={{ left: x, width: w }}
+                  title={`Photoshoot · ${sh.title}: ${format(s, 'MMM d')} → ${format(e, 'MMM d')}`}
+                >
+                  {w > 70 ? sh.title : ''}
+                </span>
+              </div>
+            </div>
+          )
+        })}
         {dated.map((t) => {
           const s = new Date(t.startsAt ?? t.dueAt!)
           const e = new Date(t.dueAt ?? t.startsAt!)

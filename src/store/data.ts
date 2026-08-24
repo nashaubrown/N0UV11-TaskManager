@@ -48,6 +48,7 @@ export interface NewShootInput {
   status: Shoot['status']
   projectId?: string
   merchantId?: string
+  listId?: string | null
   crewIds?: string[]
 }
 
@@ -65,7 +66,8 @@ export interface NewTaskInput {
   estimateMinutes?: number
 }
 
-export type TaskPatch = Omit<Partial<Task> & Partial<NewTaskInput>, 'startsAt' | 'dueAt' | 'estimateMinutes'> & {
+export type TaskPatch = Omit<Partial<Task> & Partial<NewTaskInput>, 'startsAt' | 'dueAt' | 'estimateMinutes' | 'listId'> & {
+  listId?: string | null
   startsAt?: string | null
   dueAt?: string | null
   estimateMinutes?: number | null
@@ -511,15 +513,17 @@ export const useData = create<DataState>((set, get) => ({
 
   addShoot: async (input) => {
     if (DEMO) {
-      const { crewIds, ...rest } = input
+      const { crewIds, listId, ...rest } = input
       const crew = get().members.filter((m) => crewIds?.includes(m.id))
       const shoot: Shoot = {
         id: `sh${Date.now()}`,
         ...rest,
+        listId: listId ?? undefined,
         crew: crew.length ? crew : [currentUser],
         createdAt: new Date().toISOString(),
       }
       set((s) => ({ shoots: [...s.shoots, shoot] }))
+      demoSyncShootTask(shoot.id)
       return shoot
     }
     const shoot = await api<Shoot>('POST', '/shoots', input)
@@ -529,9 +533,14 @@ export const useData = create<DataState>((set, get) => ({
 
   updateShoot: async (id, patch) => {
     if (DEMO) {
-      const { crewIds, ...rest } = patch
+      const { crewIds, listId, ...rest } = patch
       const crew = crewIds ? get().members.filter((m) => crewIds.includes(m.id)) : undefined
-      set((s) => ({ shoots: s.shoots.map((x) => (x.id === id ? { ...x, ...rest, ...(crew ? { crew } : {}) } : x)) }))
+      set((s) => ({
+        shoots: s.shoots.map((x) => (x.id === id
+          ? { ...x, ...rest, ...(listId !== undefined ? { listId: listId ?? undefined } : {}), ...(crew ? { crew } : {}) }
+          : x)),
+      }))
+      demoSyncShootTask(id)
       return
     }
     const shoot = await api<Shoot>('PATCH', `/shoots/${id}`, patch)
@@ -541,6 +550,7 @@ export const useData = create<DataState>((set, get) => ({
   deleteShoot: async (id) => {
     if (!DEMO) await api('DELETE', `/shoots/${id}`)
     set((s) => ({ shoots: s.shoots.filter((x) => x.id !== id) }))
+    if (DEMO) demoSyncShootTask(id)
   },
 
   setAiTagStatus: async (photoId, tagId, status) => {
@@ -733,6 +743,48 @@ export const useData = create<DataState>((set, get) => ({
     }
   },
 }))
+
+/** DEMO only: mirror the server's shoot ↔ "📸" task sync in-memory. A shoot
+ *  filed into a list gets a linked task that follows its title/dates/status. */
+const demoShootTasks = new Map<string, string>()
+function demoSyncShootTask(shootId: string) {
+  const { shoots, tasks } = useData.getState()
+  const sh = shoots.find((x) => x.id === shootId)
+  const linked = demoShootTasks.get(shootId)
+  if (!sh || !sh.listId) {
+    if (linked) {
+      demoShootTasks.delete(shootId)
+      useData.setState((s) => ({ tasks: s.tasks.filter((t) => t.id !== linked) }))
+    }
+    return
+  }
+  const status: Task['status'] = sh.status === 'completed' ? 'completed' : sh.status === 'cancelled' ? 'cancelled' : 'todo'
+  const patch = {
+    title: `📸 ${sh.title}`,
+    listId: sh.listId,
+    startsAt: sh.startsAt,
+    dueAt: sh.endsAt,
+    status,
+    completedAt: status === 'completed' ? new Date().toISOString() : undefined,
+  }
+  if (linked && tasks.some((t) => t.id === linked)) {
+    useData.setState((s) => ({ tasks: s.tasks.map((t) => (t.id === linked ? { ...t, ...patch } : t)) }))
+    return
+  }
+  const task: Task = {
+    id: `t${Date.now()}`,
+    priority: 'medium',
+    assignees: [],
+    labels: [],
+    subtaskCount: 0,
+    subtaskDoneCount: 0,
+    commentCount: 0,
+    createdAt: new Date().toISOString(),
+    ...patch,
+  }
+  demoShootTasks.set(shootId, task.id)
+  useData.setState((s) => ({ tasks: [task, ...s.tasks] }))
+}
 
 /** Live per-project stats derived from the store (mock counts on the seed
  *  projects are ignored in favor of what's actually loaded). */

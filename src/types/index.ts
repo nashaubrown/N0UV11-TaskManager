@@ -253,6 +253,7 @@ export interface Shoot {
   id: string
   projectId?: string
   merchantId?: string
+  listId?: string
   title: string
   description?: string
   location?: string
