@@ -86,38 +86,78 @@ feedRouter.get('/:id/feed', async (req, res) => {
   })
 })
 
-/** POST /merchants/:id/feed — add an approved photo to the top of the plan. */
-feedRouter.post('/:id/feed', requireCapability('feed.manage'), validate(z.object({ photoId: z.string().uuid() })), async (req, res) => {
+/** POST /merchants/:id/feed — place any photo on the plan. With `position`,
+ *  it lands in that exact grid cell (replacing whatever was there); without,
+ *  it goes to the top like before. */
+feedRouter.post('/:id/feed', requireCapability('feed.manage'), validate(z.object({
+  photoId: z.string().uuid(),
+  position: z.number().int().min(0).max(2000).optional(),
+})), async (req, res) => {
   const merchant = await loadMerchant(req.auth!.organizationId, param(req, 'id'))
   const photo = await prisma.photos.findFirst({
     where: { id: req.body.photoId, organization_id: req.auth!.organizationId, deleted_at: null },
-    include: { approval_requests: { orderBy: { created_at: 'desc' }, take: 1 } },
   })
   if (!photo) throw notFound('Photo')
-  if (photo.approval_requests[0]?.status !== 'approved') {
-    throw badRequest('Only approved photos can go on the feed plan')
+  if (req.body.position !== undefined) {
+    await prisma.$transaction([
+      // the cell's previous occupant leaves the plan (drop-to-replace)
+      prisma.feed_plan_items.deleteMany({
+        where: { merchant_id: merchant.id, position: req.body.position, NOT: { photo_id: photo.id } },
+      }),
+      prisma.feed_plan_items.upsert({
+        where: { merchant_id_photo_id: { merchant_id: merchant.id, photo_id: photo.id } },
+        create: { merchant_id: merchant.id, photo_id: photo.id, position: req.body.position, added_by: req.auth!.userId },
+        update: { position: req.body.position },
+      }),
+    ])
+  } else {
+    await prisma.$transaction([
+      prisma.feed_plan_items.updateMany({ where: { merchant_id: merchant.id }, data: { position: { increment: 1 } } }),
+      prisma.feed_plan_items.create({
+        data: { merchant_id: merchant.id, photo_id: photo.id, position: 0, added_by: req.auth!.userId },
+      }),
+    ])
   }
-  await prisma.$transaction([
-    prisma.feed_plan_items.updateMany({ where: { merchant_id: merchant.id }, data: { position: { increment: 1 } } }),
-    prisma.feed_plan_items.create({
-      data: { merchant_id: merchant.id, photo_id: photo.id, position: 0, added_by: req.auth!.userId },
-    }),
-  ])
-  audit(req, 'feed.add', 'merchant', merchant.id, { photoId: photo.id })
+  audit(req, 'feed.add', 'merchant', merchant.id, { photoId: photo.id, position: req.body.position })
   res.status(201).json({ items: await feedItemsFor(merchant.id) })
 })
 
-/** PATCH /merchants/:id/feed — reorder: body {order: [photoId, ...]} top-left first. */
-feedRouter.patch('/:id/feed', requireCapability('feed.manage'), validate(z.object({ order: z.array(z.string().uuid()).max(200) })), async (req, res) => {
+/** PATCH /merchants/:id/feed — reorder ({order: [photoId...]} top-left first)
+ *  or swap two grid cells ({swap: [photoIdA, photoIdB]}). */
+feedRouter.patch('/:id/feed', requireCapability('feed.manage'), validate(z.object({
+  order: z.array(z.string().uuid()).max(200).optional(),
+  swap: z.tuple([z.string().uuid(), z.string().uuid()]).optional(),
+})), async (req, res) => {
   const merchant = await loadMerchant(req.auth!.organizationId, param(req, 'id'))
-  await prisma.$transaction(
-    req.body.order.map((photoId: string, i: number) =>
-      prisma.feed_plan_items.updateMany({
-        where: { merchant_id: merchant.id, photo_id: photoId },
-        data: { position: i },
+  if (req.body.swap) {
+    const [aId, bId] = req.body.swap
+    const [a, b] = await Promise.all([
+      prisma.feed_plan_items.findUnique({ where: { merchant_id_photo_id: { merchant_id: merchant.id, photo_id: aId } } }),
+      prisma.feed_plan_items.findUnique({ where: { merchant_id_photo_id: { merchant_id: merchant.id, photo_id: bId } } }),
+    ])
+    if (!a || !b) throw notFound('Feed item')
+    await prisma.$transaction([
+      prisma.feed_plan_items.update({
+        where: { merchant_id_photo_id: { merchant_id: merchant.id, photo_id: aId } },
+        data: { position: b.position },
       }),
-    ),
-  )
+      prisma.feed_plan_items.update({
+        where: { merchant_id_photo_id: { merchant_id: merchant.id, photo_id: bId } },
+        data: { position: a.position },
+      }),
+    ])
+  } else if (req.body.order) {
+    await prisma.$transaction(
+      req.body.order.map((photoId: string, i: number) =>
+        prisma.feed_plan_items.updateMany({
+          where: { merchant_id: merchant.id, photo_id: photoId },
+          data: { position: i },
+        }),
+      ),
+    )
+  } else {
+    throw badRequest('Nothing to update')
+  }
   audit(req, 'feed.reorder', 'merchant', merchant.id)
   res.json({ items: await feedItemsFor(merchant.id) })
 })
