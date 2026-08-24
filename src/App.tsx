@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { BrowserRouter, HashRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './services/queryClient'
 import { AppShell } from './components/layout/AppShell'
@@ -49,6 +49,8 @@ function AppRoutes() {
         <Route path="deals" element={<Suspense fallback={<PageFallback />}><Deals /></Suspense>} />
         <Route path="analytics" element={<Suspense fallback={<PageFallback />}><Analytics /></Suspense>} />
         <Route path="team" element={<Suspense fallback={<PageFallback />}><Team /></Suspense>} />
+        {/* /login after signing in, stale links, typos — all land on the dashboard */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   )
