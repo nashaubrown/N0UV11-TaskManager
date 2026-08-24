@@ -12,7 +12,7 @@ import {
   projects as seedProjects,
   tasks as seedTasks,
 } from '../mocks/data'
-import type { ApprovalRequest, Capability, CommentModel, Contact, Deal, DealStage, Member, Merchant, OrgRole, Photo, Project, Shoot, Task, TaskList } from '../types'
+import type { ApprovalRequest, Capability, CommentModel, Contact, Deal, DealStage, Member, Merchant, OrgRole, Photo, Project, Shoot, Task, TaskLabel, TaskList } from '../types'
 import { ROLE_CAPABILITIES } from '../types'
 import { api, absoluteUrl, DEMO, putBytes } from '../services/api'
 import { enqueueUpload, flushQueue } from '../services/offlineQueue'
@@ -72,6 +72,7 @@ export type TaskPatch = Omit<Partial<Task> & Partial<NewTaskInput>, 'startsAt' |
   dueAt?: string | null
   estimateMinutes?: number | null
   fieldValues?: { fieldId: string; value: string }[]
+  labelIds?: string[]
 }
 
 interface Paged<T> { items: T[] }
@@ -91,7 +92,9 @@ interface DataState {
   contacts: Contact[]
   members: Member[]
   lists: TaskList[]
+  labels: TaskLabel[]
   hydrate: () => Promise<void>
+  addLabel: (name: string) => Promise<TaskLabel>
   addProject: (input: { name: string; description?: string }) => Promise<Project>
   addTask: (input: NewTaskInput) => Promise<Task>
   updateTask: (id: string, patch: TaskPatch) => Promise<void>
@@ -142,6 +145,7 @@ export const useData = create<DataState>((set, get) => ({
   contacts: [],
   members: [],
   lists: [],
+  labels: [],
 
   hydrate: async () => {
     if (get().hydrated) return
@@ -157,9 +161,11 @@ export const useData = create<DataState>((set, get) => ({
           taskCount: 0,
         })),
       )
+      const demoLabels = [...new Map(seedTasks.flatMap((t) => t.labels).map((l) => [l.id, l])).values()]
       set({
         hydrated: true,
         lists: demoLists,
+        labels: demoLabels,
         merchants: seedMerchants,
         projects: seedProjects,
         tasks: seedTasks.map((t, i) => ({
@@ -178,7 +184,7 @@ export const useData = create<DataState>((set, get) => ({
       return
     }
     try {
-      const [projects, tasks, photos, merchants, approvals, shoots, deals, contacts, members, lists] = await Promise.all([
+      const [projects, tasks, photos, merchants, approvals, shoots, deals, contacts, members, lists, labels] = await Promise.all([
         api<Paged<Project>>('GET', '/projects?limit=100'),
         api<Paged<Task>>('GET', '/tasks?limit=200'),
         api<Paged<Photo>>('GET', '/photos?limit=100'),
@@ -189,6 +195,7 @@ export const useData = create<DataState>((set, get) => ({
         api<Paged<Contact>>('GET', '/contacts?limit=100'),
         api<Paged<Member>>('GET', '/org/members'),
         api<Paged<TaskList>>('GET', '/lists'),
+        api<Paged<TaskLabel>>('GET', '/tasks/labels'),
       ])
       set({
         hydrated: true,
@@ -196,6 +203,7 @@ export const useData = create<DataState>((set, get) => ({
         projects: projects.items,
         tasks: tasks.items,
         lists: lists.items,
+        labels: labels.items,
         photos: photos.items.map(mapPhoto),
         merchants: merchants.items,
         approvals: approvals.items,
@@ -207,6 +215,18 @@ export const useData = create<DataState>((set, get) => ({
     } catch (e) {
       set({ loadError: e instanceof Error ? e.message : 'Failed to load data' })
     }
+  },
+
+  addLabel: async (name) => {
+    const existing = get().labels.find((l) => l.name.toLowerCase() === name.toLowerCase())
+    if (existing) return existing
+    const TAG_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
+    const color = TAG_COLORS[get().labels.length % TAG_COLORS.length]
+    const label = DEMO
+      ? { id: `lbl${Date.now()}`, name, color }
+      : await api<TaskLabel>('POST', '/tasks/labels', { name, color })
+    set((s) => (s.labels.some((l) => l.id === label.id) ? s : { labels: [...s.labels, label].sort((a, b) => a.name.localeCompare(b.name)) }))
+    return label
   },
 
   addProject: async (input) => {
@@ -253,9 +273,12 @@ export const useData = create<DataState>((set, get) => ({
   updateTask: async (id, patch) => {
     if (DEMO) {
       const picked = patch.assigneeIds ? get().members.filter((m) => patch.assigneeIds!.includes(m.id)) : undefined
+      const labels = patch.labelIds ? get().labels.filter((l) => patch.labelIds!.includes(l.id)) : undefined
       // demo store keeps Task-shaped fields — nulls mean "cleared"
       const demoPatch = Object.fromEntries(
-        Object.entries(patch).map(([k, v]) => [k, v === null ? undefined : v]),
+        Object.entries(patch)
+          .filter(([k]) => k !== 'labelIds')
+          .map(([k, v]) => [k, v === null ? undefined : v]),
       ) as Partial<Task>
       set((s) => ({
         tasks: s.tasks.map((t) =>
@@ -264,6 +287,7 @@ export const useData = create<DataState>((set, get) => ({
                 ...t,
                 ...demoPatch,
                 ...(picked ? { assignees: picked } : {}),
+                ...(labels ? { labels } : {}),
                 completedAt:
                   patch.status === 'completed' && t.status !== 'completed'
                     ? new Date().toISOString()
@@ -274,6 +298,7 @@ export const useData = create<DataState>((set, get) => ({
             : t,
         ),
       }))
+      demoSyncShootFromTask(id)
       return
     }
     const task = await api<Task>('PATCH', `/tasks/${id}`, patch)
@@ -792,6 +817,32 @@ function demoSyncShootTask(shootId: string) {
   }
   demoShootTasks.set(shootId, task.id)
   useData.setState((s) => ({ tasks: [task, ...s.tasks] }))
+}
+
+/** DEMO only: the reverse direction — editing a "📸" task's dates or status
+ *  pushes back to its photoshoot, like the server does. */
+function demoSyncShootFromTask(taskId: string) {
+  const entry = [...demoShootTasks.entries()].find(([, tid]) => tid === taskId)
+  if (!entry) return
+  const [shootId] = entry
+  const { shoots, tasks } = useData.getState()
+  const sh = shoots.find((x) => x.id === shootId)
+  const t = tasks.find((x) => x.id === taskId)
+  if (!sh || !t) return
+  const patch: Partial<Shoot> = {}
+  if (t.startsAt && t.dueAt && new Date(t.dueAt) > new Date(t.startsAt) &&
+      (t.startsAt !== sh.startsAt || t.dueAt !== sh.endsAt)) {
+    patch.startsAt = t.startsAt
+    patch.endsAt = t.dueAt
+  }
+  const status: Shoot['status'] =
+    t.status === 'completed' ? 'completed'
+    : t.status === 'cancelled' ? 'cancelled'
+    : sh.status === 'completed' || sh.status === 'cancelled' ? 'confirmed'
+    : sh.status
+  if (status !== sh.status) patch.status = status
+  if (!Object.keys(patch).length) return
+  useData.setState((s) => ({ shoots: s.shoots.map((x) => (x.id === shootId ? { ...x, ...patch } : x)) }))
 }
 
 /** Live per-project stats derived from the store (mock counts on the seed

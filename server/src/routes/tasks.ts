@@ -7,12 +7,12 @@ import { requireAuth, requireRole } from '../middleware/auth.js'
 import { requireCapability } from '../lib/permissions.js'
 import { validate } from '../middleware/validate.js'
 import { bulkStatusDto, createTaskDto, updateTaskDto } from '../types/dto.js'
-import { sTask, sComment } from '../lib/serialize.js'
+import { sTask, sComment, sShoot } from '../lib/serialize.js'
 import { pageParams, paged } from '../lib/pagination.js'
 import { param } from '../lib/params.js'
 import { audit } from '../services/audit.js'
 import { broadcast } from '../ws/hub.js'
-import { deleteCalendarEvent, enqueueCalendarSync } from '../services/gcal.js'
+import { deleteCalendarEvent, enqueueCalendarSync, syncShootToCalendars } from '../services/gcal.js'
 import { pushToUsers } from '../services/push.js'
 import { createCommentDto } from '../types/dto.js'
 
@@ -34,6 +34,39 @@ async function loadTask(orgId: string, id: string) {
   const t = await prisma.tasks.findFirst({ where: { id, organization_id: orgId }, include: taskInclude })
   if (!t) throw notFound('Task')
   return t
+}
+
+/** A "📸" task steers its shoot too: date and status edits push back to the
+ *  photoshoot (titles stay one-way, shoot → task), then Google re-syncs. */
+async function pushShootFromTask(taskId: string, orgId: string, actorId: string) {
+  try {
+    const shoot = await prisma.photoshoots.findFirst({ where: { linked_task_id: taskId, organization_id: orgId } })
+    if (!shoot) return
+    const task = await prisma.tasks.findUnique({ where: { id: taskId } })
+    if (!task) return
+    const data: { starts_at?: Date; ends_at?: Date; status?: never } = {}
+    if (task.starts_at && task.due_at && task.due_at > task.starts_at &&
+        (Number(task.starts_at) !== Number(shoot.starts_at) || Number(task.due_at) !== Number(shoot.ends_at))) {
+      data.starts_at = task.starts_at
+      data.ends_at = task.due_at
+    }
+    const status =
+      task.status === 'completed' ? 'completed'
+      : task.status === 'cancelled' ? 'cancelled'
+      : shoot.status === 'completed' || shoot.status === 'cancelled' ? 'confirmed'
+      : shoot.status
+    if (status !== shoot.status) data.status = status as never
+    if (!Object.keys(data).length) return
+    const updated = await prisma.photoshoots.update({
+      where: { id: shoot.id },
+      data,
+      include: { shoot_crew: { include: { users: true } } },
+    })
+    broadcast(orgId, 'shoot.updated', sShoot(updated))
+    void syncShootToCalendars(shoot.id, actorId)
+  } catch (e) {
+    console.error('task → shoot sync failed', e)
+  }
 }
 
 /** GET /tasks?status=&priority=&projectId=&assigneeId=&q=&dueBefore=&sort= */
@@ -104,6 +137,29 @@ tasksRouter.post('/bulk-status', requireCapability('tasks.manage'), validate(bul
   res.json({ updated: count })
 })
 
+/** GET /tasks/labels — the workspace's shared tag set. */
+tasksRouter.get('/labels', async (req, res) => {
+  const rows = await prisma.task_labels.findMany({
+    where: { organization_id: req.auth!.organizationId },
+    orderBy: { name: 'asc' },
+  })
+  res.json({ items: rows.map((l) => ({ id: l.id, name: l.name, color: l.color })) })
+})
+
+/** POST /tasks/labels — create (or return) a tag by name. */
+tasksRouter.post('/labels', requireCapability('tasks.manage'), validate(z.object({
+  name: z.string().min(1).max(60),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+})), async (req, res) => {
+  const label = await prisma.task_labels.upsert({
+    where: { organization_id_name: { organization_id: req.auth!.organizationId, name: req.body.name } },
+    create: { organization_id: req.auth!.organizationId, name: req.body.name, color: req.body.color },
+    update: {},
+  })
+  audit(req, 'label.create', 'task', label.id, { name: label.name })
+  res.status(201).json({ id: label.id, name: label.name, color: label.color })
+})
+
 /** GET /tasks/:id — includes sub-tasks */
 tasksRouter.get('/:id', async (req, res) => {
   const t = await loadTask(req.auth!.organizationId, param(req, 'id'))
@@ -135,6 +191,9 @@ tasksRouter.patch('/:id', requireCapability('tasks.manage'), validate(updateTask
       ...(b.assigneeIds
         ? { task_assignees: { deleteMany: {}, create: b.assigneeIds.map((user_id: string) => ({ user_id })) } }
         : {}),
+      ...(b.labelIds
+        ? { task_label_links: { deleteMany: {}, create: b.labelIds.map((label_id: string) => ({ label_id })) } }
+        : {}),
       ...(b.fieldValues
         ? {
             task_field_values: {
@@ -152,6 +211,9 @@ tasksRouter.patch('/:id', requireCapability('tasks.manage'), validate(updateTask
   audit(req, 'task.update', 'task', task.id, b)
   broadcast(req.auth!.organizationId, 'task.updated', out)
   enqueueCalendarSync(task.id, req.auth!.userId, 'update')
+  if (b.startsAt !== undefined || b.dueAt !== undefined || b.status) {
+    void pushShootFromTask(task.id, req.auth!.organizationId, req.auth!.userId)
+  }
   res.json(out)
 })
 

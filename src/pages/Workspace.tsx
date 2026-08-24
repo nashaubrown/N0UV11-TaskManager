@@ -5,7 +5,7 @@ import {
   startOfMonth, startOfWeek,
 } from 'date-fns'
 import {
-  CalendarDays, ChartNoAxesGantt, ChevronDown, ChevronLeft, ChevronRight, Columns3, Flag, FolderOpen,
+  CalendarDays, Camera, ChartNoAxesGantt, ChevronDown, ChevronLeft, ChevronRight, Columns3, Flag, FolderOpen,
   Inbox, ListTodo, MoreHorizontal, Plus, SlidersHorizontal, Store,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -13,6 +13,8 @@ import { Avatar } from '../components/common/Avatar'
 import { Badge } from '../components/common/Badge'
 import { Button } from '../components/common/Button'
 import { EmptyState } from '../components/common/EmptyState'
+import { Modal } from '../components/common/Modal'
+import { ShootForm } from '../components/shoot/ShootForm'
 import { TaskPanel } from '../components/task/TaskPanel'
 import { useData } from '../store/data'
 import { TASK_PRIORITY_META, TASK_STATUS_META, type Shoot, type Task, type TaskList, type TaskStatus } from '../types'
@@ -32,7 +34,7 @@ const dueLabel = (iso?: string) => (iso ? format(new Date(iso), 'MMM d') : '')
 const UNFILED: TaskList = { id: 'unfiled', name: 'Unfiled tasks', position: 0, fields: [], taskCount: 0 }
 
 export default function Workspace() {
-  const { merchants, lists, tasks, shoots, addList, renameList, deleteList, addListField, deleteListField, addTask, updateTask } = useData()
+  const { merchants, lists, tasks, shoots, addList, renameList, deleteList, addListField, deleteListField, addTask, updateTask, addShoot } = useData()
   const [params, setParams] = useSearchParams()
   const listId = params.get('list') ?? ''
   const view = (params.get('view') as View) ?? 'list'
@@ -50,6 +52,7 @@ export default function Workspace() {
   const [fieldDraft, setFieldDraft] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmDeleteList, setConfirmDeleteList] = useState(false)
+  const [schedulingShoot, setSchedulingShoot] = useState(false)
 
   const setParam = (key: string, value?: string) => {
     const next = new URLSearchParams(params)
@@ -68,6 +71,14 @@ export default function Workspace() {
   )
   const countFor = (l: TaskList) => tasks.filter((t) => t.listId === l.id && !t.parentTaskId).length
   const unfiledCount = tasks.filter((t) => !t.listId && !t.parentTaskId).length
+  /** Tasks still waiting on unfinished work get a "Blocked" marker. */
+  const blockedIds = useMemo(() => {
+    const stillOpen = (id: string) => {
+      const d = tasks.find((x) => x.id === id)
+      return Boolean(d && d.status !== 'completed' && d.status !== 'cancelled')
+    }
+    return new Set(tasks.filter((t) => (t.dependsOnIds ?? []).some(stillOpen)).map((t) => t.id))
+  }, [tasks])
 
   const toggleFolder = (id: string) =>
     setClosedFolders((cur) => { const next = new Set(cur); next.has(id) ? next.delete(id) : next.add(id); return next })
@@ -192,6 +203,11 @@ export default function Workspace() {
                   )}
                 </div>}
                 <span className="flex-1" />
+                {!isUnfiled && (
+                  <Button variant="ghost" size="sm" icon={<Camera className="size-4" />} onClick={() => setSchedulingShoot(true)}>
+                    Schedule shoot
+                  </Button>
+                )}
                 {!isUnfiled && <div className="relative">
                   <Button variant="ghost" size="sm" icon={<SlidersHorizontal className="size-4" />} onClick={() => setFieldsOpen((o) => !o)}>
                     Fields
@@ -230,7 +246,7 @@ export default function Workspace() {
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              {view === 'list' && <ListView tasks={listTasks} list={selected} onOpen={setOpenTaskId} onAdd={(title, status) => void addTask({ title, status, priority: 'medium', listId: isUnfiled ? undefined : selected.id })} />}
+              {view === 'list' && <ListView tasks={listTasks} list={selected} blockedIds={blockedIds} onOpen={setOpenTaskId} onAdd={(title, status) => void addTask({ title, status, priority: 'medium', listId: isUnfiled ? undefined : selected.id })} />}
               {view === 'board' && <BoardView tasks={listTasks} onOpen={setOpenTaskId} onMove={(id, status) => void updateTask(id, { status })} />}
               {view === 'calendar' && <CalendarView tasks={listTasks} shoots={listShoots} onOpen={setOpenTaskId} onReschedule={(id, day) => {
                 const t = listTasks.find((x) => x.id === id)
@@ -245,15 +261,27 @@ export default function Workspace() {
       </div>
 
       <TaskPanel taskId={openTaskId} onClose={() => setOpenTaskId(null)} />
+
+      <Modal open={schedulingShoot} onClose={() => setSchedulingShoot(false)} title="Schedule a shoot" size="lg">
+        {selected && !isUnfiled && (
+          <ShootForm
+            defaultListId={selected.id}
+            defaultMerchantId={merchant?.id}
+            onSubmit={(values) => { void addShoot(values); setSchedulingShoot(false) }}
+            onCancel={() => setSchedulingShoot(false)}
+          />
+        )}
+      </Modal>
     </div>
   )
 }
 
 /* ---------- List view: collapsible status groups ---------- */
 
-function ListView({ tasks, list, onOpen, onAdd }: {
+function ListView({ tasks, list, blockedIds, onOpen, onAdd }: {
   tasks: Task[]
   list: TaskList
+  blockedIds?: Set<string>
   onOpen: (id: string) => void
   onAdd: (title: string, status: TaskStatus) => void
 }) {
@@ -285,6 +313,7 @@ function ListView({ tasks, list, onOpen, onAdd }: {
                   <span className="flex items-center gap-2 min-w-0">
                     <span className={clsx('size-2.5 rounded-full shrink-0', t.status === 'completed' ? 'bg-success' : 'bg-ink-faint/40')} />
                     <span className={clsx('text-sm truncate', t.status === 'completed' ? 'text-ink-muted line-through' : 'text-ink')}>{t.title}</span>
+                    {blockedIds?.has(t.id) && <Badge tone="warning">Blocked</Badge>}
                     {t.labels.map((l) => (
                       <span key={l.id} className="text-[10px] font-medium rounded-full px-1.5 py-px text-white shrink-0" style={{ backgroundColor: l.color }}>{l.name}</span>
                     ))}

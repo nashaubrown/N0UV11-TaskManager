@@ -66,6 +66,13 @@ export default function Tasks() {
   }, [tasks, filter, query, listFilter, mineOnly, dueSoon, user?.id])
 
   const roots = tasks.filter((t) => !t.parentTaskId)
+  const blockedIds = useMemo(() => {
+    const stillOpen = (id: string) => {
+      const d = tasks.find((x) => x.id === id)
+      return Boolean(d && d.status !== 'completed' && d.status !== 'cancelled')
+    }
+    return new Set(tasks.filter((t) => (t.dependsOnIds ?? []).some(stillOpen)).map((t) => t.id))
+  }, [tasks])
   const counts = (s: Filter) => (s === 'all' ? roots.length : roots.filter((t) => t.status === s).length)
 
   const groups = STATUS_ORDER.map((s) => ({ status: s, tasks: filtered.filter((t) => t.status === s) }))
@@ -178,6 +185,7 @@ export default function Tasks() {
                       <span className="flex items-center gap-2 min-w-0">
                         <span className={clsx('size-2.5 rounded-full shrink-0', t.status === 'completed' ? 'bg-success' : 'bg-ink-faint/40')} />
                         <span className={clsx('text-sm truncate', t.status === 'completed' ? 'text-ink-muted line-through' : 'text-ink')}>{t.title}</span>
+                        {blockedIds.has(t.id) && <Badge tone="warning">Blocked</Badge>}
                         {t.labels.map((l) => (
                           <span key={l.id} className="text-[10px] font-medium rounded-full px-1.5 py-px text-white shrink-0" style={{ backgroundColor: l.color }}>{l.name}</span>
                         ))}
