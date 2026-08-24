@@ -9,6 +9,8 @@ import { Button } from '../components/common/Button'
 import { Modal } from '../components/common/Modal'
 import { Select } from '../components/common/Input'
 import { driveConfig, importDrivePhotos, pickDrivePhotos, type DrivePick } from '../services/googleDrive'
+import { PickSheet } from '../components/photo/PickSheet'
+import clsx from 'clsx'
 import { PhotoGallery } from '../components/photo/PhotoGallery'
 import { PhotoViewer } from '../components/photo/PhotoViewer'
 import { GridCanvas, RowsPicker, useGridRows, type GridDrag, type GridItem } from '../components/photo/GridCanvas'
@@ -211,6 +213,10 @@ export default function PhotoLibrary() {
   const [gridDrag, setGridDrag] = useState<GridDrag | null>(null)
   const [boardNaming, setBoardNaming] = useState(false)
   const [boardName, setBoardName] = useState('')
+  /* Preview-app style mobile: Library / Grid tabs, tap a cell to fill it. */
+  const [mobileTab, setMobileTab] = useState<'library' | 'grid'>('library')
+  const [pickFor, setPickFor] = useState<number | null>(null)
+  const [pickBusy, setPickBusy] = useState(false)
 
   const mapItem = (i: GridItem) => ({ ...i, thumbUrl: absoluteUrl(i.thumbUrl) })
 
@@ -291,6 +297,44 @@ export default function PhotoLibrary() {
     if (targetKind === 'board') void api('DELETE', `/boards/${targetId}/items/${photoId}`).catch(() => {})
     else void api('DELETE', `/merchants/${targetId}/feed/${photoId}`).catch(() => {})
   }
+
+  /** Photos the pick sheet offers: the target merchant's for feed grids, everything for boards. */
+  const pickCandidates = useMemo(() => {
+    const ready = photos.filter((p) => p.status === 'ready')
+    return targetKind === 'merchant' ? ready.filter((p) => p.merchantId === targetId) : ready
+  }, [photos, targetKind, targetId])
+  const placedIds = useMemo(() => new Set(gridItems.map((i) => i.photoId)), [gridItems])
+
+  const pickPhoto = (photoId: string) => {
+    if (pickFor === null) return
+    gridPlace(photoId, pickFor)
+    setPickFor(null)
+  }
+
+  const pickUpload = async (list: FileList | null) => {
+    const images = [...(list ?? [])].filter((f) => f.type.startsWith('image/'))
+    if (!images.length || pickFor === null) return
+    setPickBusy(true)
+    try {
+      const added = await addPhotos(images, { merchantId: targetKind === 'merchant' ? targetId : undefined })
+      if (added[0]) gridPlace(added[0].id, pickFor)
+      setPickFor(null)
+    } finally {
+      setPickBusy(false)
+    }
+  }
+
+  /** Instagram-style mobile gallery: edge-to-edge, hairline gaps, photos only. */
+  const IgGrid = ({ photos: ps }: { photos: Photo[] }) => (
+    <div className="desktop:hidden grid grid-cols-3 gap-px -mx-4 tablet:-mx-6 bg-border/40">
+      {ps.map((p) => (
+        <button key={p.id} onClick={() => setViewerIndex(filtered.findIndex((x) => x.id === p.id))}
+                aria-label={p.title ?? 'Photo'} className="relative aspect-square bg-surface-2">
+          <img src={p.thumbUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+        </button>
+      ))}
+    </div>
+  )
 
   const createBoard = async () => {
     if (!boardName.trim()) return
@@ -453,14 +497,30 @@ export default function PhotoLibrary() {
                onChange={(e) => { ingest(e.target.files); e.target.value = '' }} />
       </div>
 
+      {/* mobile: Instagram-style segmented tabs — one surface at a time */}
+      <div className="desktop:hidden flex rounded-full border border-border p-0.5 bg-surface" role="tablist" aria-label="Library views">
+        {([['library', 'Library'], ['grid', 'Grid builder']] as const).map(([tab, label]) => (
+          <button key={tab} role="tab" aria-selected={mobileTab === tab} onClick={() => setMobileTab(tab)}
+                  className={clsx('flex-1 rounded-full py-1.5 text-sm font-medium transition-colors',
+                    mobileTab === tab ? 'nv-gradient text-white' : 'text-ink-muted')}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="desktop:grid desktop:grid-cols-[240px_minmax(360px,44%)_1fr] desktop:gap-5 desktop:items-start">
         {/* filter panel — sidebar on desktop, drawer on mobile */}
         <aside className="hidden desktop:block sticky top-20 rounded-(--nv-radius-lg) border border-border bg-surface p-4">
           {filterPanel}
         </aside>
 
-        {/* grid builder canvas — drag photos in from the gallery on the right */}
-        <section className="sticky top-20 rounded-(--nv-radius-lg) border border-border bg-surface p-4 grid gap-3 content-start mb-4 desktop:mb-0" aria-label="Grid builder">
+        {/* grid builder canvas — drag in from the gallery, or tap a cell to fill it */}
+        <section
+          className={clsx(
+            mobileTab === 'grid' ? 'grid' : 'hidden desktop:grid',
+            'desktop:sticky top-20 rounded-(--nv-radius-lg) border border-border bg-surface p-4 gap-3 content-start mb-4 desktop:mb-0',
+          )}
+          aria-label="Grid builder">
           <div className="flex items-center gap-2">
             <h2 className="font-display font-semibold text-lg text-ink flex-1">Grid builder</h2>
             {targetKind === 'board' && (
@@ -502,6 +562,7 @@ export default function PhotoLibrary() {
             drag={gridDrag}
             setDrag={setGridDrag}
             minRows={minRows}
+            onPickCell={setPickFor}
             onPlace={gridPlace}
             onSwap={gridSwap}
             onRemove={gridRemove}
@@ -511,20 +572,21 @@ export default function PhotoLibrary() {
             }}
           />
           <p className="text-xs text-ink-muted">
-            Drag photos from the library on the right into a cell — drag between cells to swap. Saves instantly.
+            <span className="hidden desktop:inline">Drag photos from the library on the right into a cell — drag between cells to swap. Saves instantly.</span>
+            <span className="desktop:hidden">Tap a cell to add a photo. Hold a photo, then drag it to reorder. Saves instantly.</span>
             {targetKind === 'merchant' && ' This is the merchant’s feed grid, mirrored in their phone preview.'}
           </p>
         </section>
 
-        <div className="grid gap-4 min-w-0">
+        <div className={clsx(mobileTab === 'library' ? 'grid' : 'hidden desktop:grid', 'gap-4 min-w-0')}>
           {groups ? (
-            <div className="grid gap-6">
+            <div className="grid gap-6 desktop:gap-6 gap-y-5">
               {groups.length === 0 && (
                 <EmptyState icon={<ImagePlus />} title="No photos match" description="Loosen the filters or upload something new." />
               )}
               {groups.map((g) => (
                 <section key={g.key}>
-                  <div className="flex items-baseline gap-2 mb-3">
+                  <div className="flex items-baseline gap-2 mb-2 desktop:mb-3">
                     <h2 className="font-display font-semibold text-lg text-ink inline-flex items-center gap-2">
                       {g.key !== 'none' && <Store className="size-4 text-brand-deep dark:text-brand" aria-hidden />}
                       {g.title}
@@ -532,17 +594,35 @@ export default function PhotoLibrary() {
                     {g.subtitle && <span className="text-sm text-ink-muted">{g.subtitle}</span>}
                     <span className="text-sm text-ink-faint tabular-nums">· {g.photos.length}</span>
                   </div>
-                  <PhotoGallery photos={g.photos} large onDragStartPhoto={(id) => setGridDrag({ kind: 'lib', photoId: id })} onDragEndPhoto={() => setGridDrag(null)} onOpen={(p) => setViewerIndex(filtered.findIndex((x) => x.id === p.id))} />
+                  <IgGrid photos={g.photos} />
+                  <div className="hidden desktop:block">
+                    <PhotoGallery photos={g.photos} large onDragStartPhoto={(id) => setGridDrag({ kind: 'lib', photoId: id })} onDragEndPhoto={() => setGridDrag(null)} onOpen={(p) => setViewerIndex(filtered.findIndex((x) => x.id === p.id))} />
+                  </div>
                 </section>
               ))}
             </div>
           ) : (
-            <PhotoGallery photos={filtered} large onDragStartPhoto={(id) => setGridDrag({ kind: 'lib', photoId: id })} onDragEndPhoto={() => setGridDrag(null)} onOpen={(p) => setViewerIndex(filtered.findIndex((x) => x.id === p.id))} />
+            <>
+              <IgGrid photos={filtered} />
+              <div className="hidden desktop:block">
+                <PhotoGallery photos={filtered} large onDragStartPhoto={(id) => setGridDrag({ kind: 'lib', photoId: id })} onDragEndPhoto={() => setGridDrag(null)} onOpen={(p) => setViewerIndex(filtered.findIndex((x) => x.id === p.id))} />
+              </div>
+            </>
           )}
         </div>
       </div>
 
       <PhotoViewer photos={filtered} index={viewerIndex} onClose={() => setViewerIndex(null)} onNavigate={setViewerIndex} />
+
+      <PickSheet
+        open={pickFor !== null}
+        busy={pickBusy}
+        photos={pickCandidates}
+        usedIds={placedIds}
+        onPick={pickPhoto}
+        onUpload={(files) => void pickUpload(files)}
+        onClose={() => setPickFor(null)}
+      />
 
       {/* mobile filter drawer */}
       <AnimatePresence>

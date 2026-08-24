@@ -108,7 +108,7 @@ interface DataState {
   taskAttachment: (taskId: string, op: { add?: string; remove?: string }) => Promise<void>
   taskTimer: (taskId: string, action: 'start' | 'stop') => Promise<void>
   taskDependency: (taskId: string, op: { add?: string; remove?: string }) => Promise<void>
-  addPhotos: (files: File[], opts?: { projectId?: string; merchantId?: string }) => Promise<void>
+  addPhotos: (files: File[], opts?: { projectId?: string; merchantId?: string }) => Promise<Photo[]>
   /** Merge already-registered photos (e.g. a Drive import response) into the store. */
   addImportedPhotos: (photos: Photo[]) => void
   addComment: (target: { taskId?: string; photoId?: string }, body: string) => Promise<void>
@@ -127,7 +127,7 @@ interface DataState {
   removeMember: (userId: string) => Promise<void>
   loadComments: (target: { taskId?: string; photoId?: string }) => Promise<void>
   flushOfflineUploads: () => Promise<void>
-  uploadOne: (file: Blob, fileName: string, contentType: string, opts?: { projectId?: string; merchantId?: string }) => Promise<void>
+  uploadOne: (file: Blob, fileName: string, contentType: string, opts?: { projectId?: string; merchantId?: string }) => Promise<Photo | undefined>
   applyEvent: (type: string, payload: unknown) => void
 }
 
@@ -463,13 +463,15 @@ export const useData = create<DataState>((set, get) => ({
         }
       })
       set((s) => ({ photos: [...added, ...s.photos] }))
-      return
+      return added
     }
     // real flow: presign → PUT bytes → register; photos appear as each lands.
     // Network failures queue the file in IndexedDB for retry when back online.
+    const uploaded: Photo[] = []
     for (const file of files) {
       try {
-        await get().uploadOne(file, file.name, file.type || 'image/jpeg', opts)
+        const photo = await get().uploadOne(file, file.name, file.type || 'image/jpeg', opts)
+        if (photo) uploaded.push(photo)
       } catch (e) {
         const offline = !navigator.onLine || (e instanceof Error && e.message.startsWith('Cannot reach'))
         if (!offline) throw e
@@ -483,6 +485,7 @@ export const useData = create<DataState>((set, get) => ({
         set((s) => ({ pendingUploads: s.pendingUploads + 1 }))
       }
     }
+    return uploaded
   },
 
   /** One presign → PUT → register cycle. Internal, also used by the flusher. */
@@ -500,14 +503,16 @@ export const useData = create<DataState>((set, get) => ({
       projectId: opts?.projectId,
       merchantId: opts?.merchantId,
     })
-    set((s) => ({ photos: s.photos.some((p) => p.id === photo.id) ? s.photos : [mapPhoto(photo), ...s.photos] }))
+    const mapped = mapPhoto(photo)
+    set((s) => ({ photos: s.photos.some((p) => p.id === photo.id) ? s.photos : [mapped, ...s.photos] }))
+    return mapped
   },
 
   flushOfflineUploads: async () => {
     if (DEMO) return
-    const done = await flushQueue((item) =>
-      get().uploadOne(item.file, item.fileName, item.contentType, { projectId: item.projectId, merchantId: item.merchantId }),
-    )
+    const done = await flushQueue(async (item) => {
+      await get().uploadOne(item.file, item.fileName, item.contentType, { projectId: item.projectId, merchantId: item.merchantId })
+    })
     if (done > 0) set((s) => ({ pendingUploads: Math.max(0, s.pendingUploads - done) }))
   },
 
