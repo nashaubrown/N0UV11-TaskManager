@@ -61,8 +61,8 @@ function ActionRow({ icon: Icon, label, onClick }: { icon: React.ComponentType<{
 
 export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose: () => void }) {
   const {
-    tasks, lists, merchants, members, photos, comments,
-    addTask, updateTask, deleteTask, taskChecklist, taskAttachment, taskTimer, taskDependency, addComment, loadComments,
+    tasks, lists, merchants, members, photos, comments, labels,
+    addTask, addLabel, updateTask, deleteTask, taskChecklist, taskAttachment, taskTimer, taskDependency, addComment, loadComments,
     addImportedPhotos,
   } = useData()
   const { user } = useAuth()
@@ -76,6 +76,9 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
   const [subtaskDraft, setSubtaskDraft] = useState('')
   const [addingSubtask, setAddingSubtask] = useState(false)
   const [depPicking, setDepPicking] = useState(false)
+  const [depQuery, setDepQuery] = useState('')
+  const [tagsOpen, setTagsOpen] = useState(false)
+  const [tagDraft, setTagDraft] = useState('')
   const [checkOpen, setCheckOpen] = useState(false)
   const [checkDraft, setCheckDraft] = useState('')
   const [picking, setPicking] = useState(false)
@@ -95,7 +98,7 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
     setDescription(task.description ?? '')
     fieldDrafts.current = Object.fromEntries((task.fieldValues ?? []).map((v) => [v.fieldId, v.value]))
     setConfirmDelete(false); setAddingSubtask(false); setDepPicking(false); setCheckOpen(false); setPicking(false); setEstimateOpen(false)
-    setDriveGate(null); setDriveNote(undefined)
+    setDriveGate(null); setDriveNote(undefined); setTagsOpen(false); setTagDraft(''); setDepQuery('')
     void loadComments({ taskId })
     if (DEMO) setSubtasks(tasks.filter((t) => t.parentTaskId === taskId))
     else api<Task & { subtasks: Task[] }>('GET', `/tasks/${taskId}`).then((d) => setSubtasks(d.subtasks)).catch(() => setSubtasks([]))
@@ -117,10 +120,22 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
     const q = pickQuery.trim().toLowerCase()
     return photos.filter((p) => p.status === 'ready' && (!q || (p.title ?? '').toLowerCase().includes(q))).slice(0, 60)
   }, [photos, pickQuery])
-  const depOptions = useMemo(
-    () => tasks.filter((t) => t.listId === task?.listId && t.id !== taskId && !t.parentTaskId && !(task?.dependsOnIds ?? []).includes(t.id)),
-    [tasks, task, taskId],
-  )
+  const listLabelFor = (t: Task) => {
+    const l = lists.find((x) => x.id === t.listId)
+    if (!l) return 'Unfiled'
+    const m = merchants.find((mm) => mm.id === l.merchantId)
+    return m ? `${m.name} / ${l.name}` : l.name
+  }
+  /** Any root task in the workspace can be waited on — same list first. */
+  const depOptions = useMemo(() => {
+    const q = depQuery.trim().toLowerCase()
+    return tasks
+      .filter((t) =>
+        t.id !== taskId && !t.parentTaskId && !(task?.dependsOnIds ?? []).includes(t.id) &&
+        (!q || t.title.toLowerCase().includes(q)))
+      .sort((a, b) => Number(b.listId === task?.listId) - Number(a.listId === task?.listId))
+      .slice(0, 30)
+  }, [tasks, task, taskId, depQuery])
   const dependsOn = useMemo(
     () => (task?.dependsOnIds ?? []).map((id) => tasks.find((t) => t.id === id)).filter((t): t is Task => Boolean(t)),
     [task?.dependsOnIds, tasks],
@@ -318,15 +333,55 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
           </Row>
 
           <Row icon={Tag} label="Tags">
-            {task.labels.length === 0 ? (
-              <Empty />
+            {task.labels.length === 0 && !tagsOpen ? (
+              <Empty onClick={() => setTagsOpen(true)} />
             ) : (
-              <div className="flex gap-1 flex-wrap">
+              <div className="flex items-center gap-1 flex-wrap">
                 {task.labels.map((l) => (
                   <span key={l.id} className="text-xs font-medium rounded-full px-2 py-0.5 text-white" style={{ backgroundColor: l.color }}>
                     {l.name}
                   </span>
                 ))}
+                <button onClick={() => setTagsOpen((o) => !o)} aria-label="Edit tags"
+                        className="size-6 rounded-full border border-dashed border-border text-ink-faint text-sm hover:text-ink hover:border-ink-faint">
+                  +
+                </button>
+              </div>
+            )}
+            {tagsOpen && (
+              <div className="mt-1.5 grid gap-1.5">
+                {labels.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {labels.map((l) => {
+                      const on = task.labels.some((x) => x.id === l.id)
+                      return (
+                        <button key={l.id} aria-pressed={on}
+                                onClick={() => {
+                                  const cur = task.labels.map((x) => x.id)
+                                  void updateTask(task.id, { labelIds: on ? cur.filter((x) => x !== l.id) : [...cur, l.id] })
+                                }}
+                                className={clsx('text-xs font-medium rounded-full px-2 py-0.5 border transition-opacity',
+                                  on ? 'text-white border-transparent' : 'text-ink-2 border-border opacity-70 hover:opacity-100')}
+                                style={on ? { backgroundColor: l.color } : { borderColor: l.color, color: l.color }}>
+                          {l.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    const name = tagDraft.trim()
+                    if (!name) return
+                    void addLabel(name).then((l) => updateTask(task.id, { labelIds: [...new Set([...task.labels.map((x) => x.id), l.id])] }))
+                    setTagDraft('')
+                  }}
+                >
+                  <input value={tagDraft} onChange={(e) => setTagDraft(e.target.value)}
+                         placeholder="New tag — Enter to create & add" aria-label="New tag name"
+                         className="w-full h-8 rounded-(--nv-radius-sm) border border-border bg-surface text-ink px-2 text-sm placeholder:text-ink-faint focus:border-brand focus:outline-none" />
+                </form>
               </div>
             )}
           </Row>
@@ -403,15 +458,26 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
               </div>
             ))}
             {depPicking && (
-              depOptions.length === 0 ? (
-                <p className="text-xs text-ink-muted">No other tasks in this list to depend on.</p>
-              ) : (
-                <Select aria-label="Add dependency" defaultValue=""
-                        onChange={(e) => { if (e.target.value) { void taskDependency(task.id, { add: e.target.value }); setDepPicking(false) } }}>
-                  <option value="" disabled>Waits on…</option>
-                  {depOptions.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-                </Select>
-              )
+              <div className="border border-border rounded-(--nv-radius-md) p-2 grid gap-1.5 bg-surface-2/50">
+                <input autoFocus value={depQuery} onChange={(e) => setDepQuery(e.target.value)}
+                       placeholder="Search any task in the workspace…" aria-label="Search tasks to depend on"
+                       className="h-8 rounded-(--nv-radius-sm) border border-border bg-surface text-ink px-2 text-sm placeholder:text-ink-faint focus:border-brand focus:outline-none" />
+                {depOptions.length === 0 ? (
+                  <p className="text-xs text-ink-muted px-1">No matching tasks.</p>
+                ) : (
+                  <div className="max-h-44 overflow-y-auto grid">
+                    {depOptions.map((t) => (
+                      <button key={t.id}
+                              onClick={() => { void taskDependency(task.id, { add: t.id }); setDepPicking(false); setDepQuery('') }}
+                              className="flex items-center gap-2 px-1.5 py-1.5 rounded-(--nv-radius-sm) hover:bg-surface-2 text-left">
+                        <span className={clsx('size-2 rounded-full shrink-0', t.status === 'completed' ? 'bg-success' : 'bg-ink-faint/40')} />
+                        <span className="text-sm text-ink truncate">{t.title}</span>
+                        <span className="text-xs text-ink-faint truncate ml-auto shrink-0">{listLabelFor(t)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}

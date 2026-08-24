@@ -43,6 +43,7 @@ export const createTaskDto = z.object({
 })
 export const updateTaskDto = createTaskDto.partial().extend({
   listId: z.string().uuid().nullable().optional(),
+  labelIds: z.array(z.string().uuid()).max(20).optional(),
   startsAt: z.string().datetime({ offset: true }).nullable().optional(),
   dueAt: z.string().datetime({ offset: true }).nullable().optional(),
   estimateMinutes: z.number().int().min(0).max(100_000).nullable().optional(),

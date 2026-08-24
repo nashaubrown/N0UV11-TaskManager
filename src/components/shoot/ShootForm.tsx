@@ -13,9 +13,11 @@ const toLocalInput = (iso: string) => {
   return d.toISOString().slice(0, 16)
 }
 
-export function ShootForm({ initial, defaultDate, onSubmit, onCancel }: {
+export function ShootForm({ initial, defaultDate, defaultListId, defaultMerchantId, onSubmit, onCancel }: {
   initial?: Shoot
   defaultDate?: Date
+  defaultListId?: string
+  defaultMerchantId?: string
   onSubmit: (values: NewShootInput) => void
   onCancel: () => void
 }) {
@@ -27,12 +29,12 @@ export function ShootForm({ initial, defaultDate, onSubmit, onCancel }: {
   const [title, setTitle] = useState(initial?.title ?? '')
   const [location, setLocation] = useState(initial?.location ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
-  const [merchantId, setMerchantId] = useState(initial?.merchantId ?? '')
+  const [merchantId, setMerchantId] = useState(initial?.merchantId ?? defaultMerchantId ?? '')
   const [projectId, setProjectId] = useState(initial?.projectId ?? '')
   const [startsAt, setStartsAt] = useState(toLocalInput(initial?.startsAt ?? defaultStart.toISOString()))
   const [endsAt, setEndsAt] = useState(toLocalInput(initial?.endsAt ?? defaultEnd.toISOString()))
   const [status, setStatus] = useState<Shoot['status']>(initial?.status ?? 'planning')
-  const [listId, setListId] = useState(initial?.listId ?? '')
+  const [listId, setListId] = useState(initial?.listId ?? defaultListId ?? '')
   const [crewIds, setCrewIds] = useState<string[]>(initial?.crew.map((u) => u.id) ?? [])
   const [error, setError] = useState<string>()
 
