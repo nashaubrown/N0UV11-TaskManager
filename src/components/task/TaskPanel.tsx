@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  CalendarDays, Check, ChevronDown, Clock, Flag, GitBranch, ListChecks, ListTodo, ListTree, Paperclip, Pause, Play,
-  Tag, Trash2, UserRound, X,
+  CalendarDays, Check, ChevronDown, Clock, CloudDownload, Flag, GitBranch, ListChecks, ListTodo, ListTree, Paperclip,
+  Pause, Play, Tag, Trash2, UserRound, X,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { Avatar } from '../common/Avatar'
@@ -10,6 +10,7 @@ import { Button } from '../common/Button'
 import { CommentThread } from '../common/CommentThread'
 import { Select } from '../common/Input'
 import { api, DEMO } from '../../services/api'
+import { driveConfig, importDrivePhotos, pickDrivePhotos } from '../../services/googleDrive'
 import { useData } from '../../store/data'
 import { useAuth } from '../../store/auth'
 import { TASK_PRIORITY_META, TASK_STATUS_META, type Task, type TaskPriority, type TaskStatus } from '../../types'
@@ -62,6 +63,7 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
   const {
     tasks, lists, merchants, members, photos, comments,
     addTask, updateTask, deleteTask, taskChecklist, taskAttachment, taskTimer, taskDependency, addComment, loadComments,
+    addImportedPhotos,
   } = useData()
   const { user } = useAuth()
   const task = tasks.find((t) => t.id === taskId)
@@ -78,6 +80,9 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
   const [checkDraft, setCheckDraft] = useState('')
   const [picking, setPicking] = useState(false)
   const [pickQuery, setPickQuery] = useState('')
+  const [driveBusy, setDriveBusy] = useState(false)
+  const [driveGate, setDriveGate] = useState<'connect' | 'rescope' | null>(null)
+  const [driveNote, setDriveNote] = useState<string>()
   const [assigneesOpen, setAssigneesOpen] = useState(false)
   const [estimateOpen, setEstimateOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -90,6 +95,7 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
     setDescription(task.description ?? '')
     fieldDrafts.current = Object.fromEntries((task.fieldValues ?? []).map((v) => [v.fieldId, v.value]))
     setConfirmDelete(false); setAddingSubtask(false); setDepPicking(false); setCheckOpen(false); setPicking(false); setEstimateOpen(false)
+    setDriveGate(null); setDriveNote(undefined)
     void loadComments({ taskId })
     if (DEMO) setSubtasks(tasks.filter((t) => t.parentTaskId === taskId))
     else api<Task & { subtasks: Task[] }>('GET', `/tasks/${taskId}`).then((d) => setSubtasks(d.subtasks)).catch(() => setSubtasks([]))
@@ -133,6 +139,34 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
   const toggleAssignee = (id: string) => {
     const cur = task.assignees.map((a) => a.id)
     void updateTask(task.id, { assigneeIds: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] })
+  }
+
+  /** Pick photos in the Google Drive dialog, import them (filed under the
+   *  task's merchant), then attach every imported photo to this task. */
+  const attachFromDrive = async () => {
+    setDriveNote(undefined); setDriveGate(null); setDriveBusy(true)
+    try {
+      const cfg = await driveConfig()
+      if (!cfg.configured) return setDriveNote("Google isn't configured on this server yet.")
+      if (!cfg.connected) return setDriveGate('connect')
+      if (!cfg.hasDriveScope || !cfg.accessToken) return setDriveGate('rescope')
+      const picks = await pickDrivePhotos(cfg)
+      if (!picks.length) return
+      const merchantId = lists.find((l) => l.id === task.listId)?.merchantId
+      const d = await importDrivePhotos(picks, merchantId)
+      addImportedPhotos(d.items)
+      for (const p of d.items) await taskAttachment(task.id, { add: p.id })
+      if (d.failed.length) setDriveNote(`${d.failed.length} file${d.failed.length === 1 ? '' : 's'} failed — ${d.failed[0].reason}`)
+    } catch (e) {
+      setDriveNote(e instanceof Error ? e.message : 'Drive import failed')
+    } finally {
+      setDriveBusy(false)
+    }
+  }
+
+  const connectGoogle = async () => {
+    const { url } = await api<{ url: string }>('GET', '/calendar/connect')
+    window.location.href = url
   }
 
   const addSubtask = async () => {
@@ -430,8 +464,25 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
                   <input value={pickQuery} onChange={(e) => setPickQuery(e.target.value)} placeholder="Search the photo library…"
                          aria-label="Search photos to attach" autoFocus
                          className="h-8 flex-1 rounded-(--nv-radius-sm) border border-border bg-surface text-ink px-2 text-sm placeholder:text-ink-faint focus:border-brand focus:outline-none" />
+                  {!DEMO && (
+                    <Button size="sm" variant="secondary" loading={driveBusy} icon={<CloudDownload className="size-3.5" />}
+                            onClick={() => void attachFromDrive()} aria-label="Import from Google Drive">
+                      Drive
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => setPicking(false)}>Done</Button>
                 </div>
+                {driveGate && (
+                  <p className="text-xs text-ink-muted">
+                    {driveGate === 'rescope'
+                      ? 'Google is connected without Drive access yet — reconnect once to grant it. '
+                      : 'Connect Google to pick photos straight from Drive. '}
+                    <button onClick={() => void connectGoogle()} className="text-brand-deep dark:text-brand font-medium hover:underline">
+                      {driveGate === 'rescope' ? 'Reconnect Google' : 'Connect Google'}
+                    </button>
+                  </p>
+                )}
+                {driveNote && <p className="text-xs text-ink-muted" role="status">{driveNote}</p>}
                 <div className="grid grid-cols-5 gap-1 max-h-40 overflow-y-auto">
                   {pickerPhotos.map((p) => (
                     <button key={p.id} onClick={() => void taskAttachment(task.id, { add: p.id })}
