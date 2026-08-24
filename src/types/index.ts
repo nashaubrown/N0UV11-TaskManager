@@ -155,6 +155,7 @@ export interface Task {
   fieldValues?: { fieldId: string; value: string }[]
   checklist?: ChecklistItem[]
   attachmentIds?: string[]
+  dependsOnIds?: string[]
   trackedSeconds?: number
   runningEntry?: { userId: string; startedAt: string }
   subtaskCount: number
