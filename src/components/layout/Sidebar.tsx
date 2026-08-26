@@ -49,7 +49,7 @@ export function Sidebar() {
 
   if (isDesktop) {
     return (
-      <aside className="w-60 shrink-0 border-r border-border bg-surface hidden desktop:flex flex-col">
+      <aside className="w-60 shrink-0 border-r border-border bg-surface nv-glass hidden desktop:flex flex-col">
         <NavList />
         <div className="mt-auto p-4 text-xs text-ink-faint">NOUVII · Phase 1</div>
       </aside>
@@ -64,7 +64,7 @@ export function Sidebar() {
           <motion.aside
             initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="absolute inset-y-0 left-0 w-64 bg-surface border-r border-border shadow-xl"
+            className="absolute inset-y-0 left-0 w-64 bg-surface nv-glass border-r border-border shadow-xl"
           >
             <div className="px-5 py-4 border-b border-border">
               <span className="font-display font-bold text-lg nv-gradient-text">NOUVII</span>
@@ -83,7 +83,7 @@ export function MobileTabBar() {
   return (
     <nav
       aria-label="Primary"
-      className="desktop:hidden fixed bottom-0 inset-x-0 z-30 bg-surface/95 backdrop-blur border-t border-border
+      className="desktop:hidden fixed bottom-0 inset-x-0 z-30 bg-surface nv-glass border-t border-border
                  flex justify-around pb-[env(safe-area-inset-bottom)]"
     >
       {items.map(({ to, label, icon: Icon, end }) => (

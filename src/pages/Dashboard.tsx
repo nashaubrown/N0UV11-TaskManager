@@ -178,6 +178,8 @@ export default function Dashboard() {
 
   return (
     <div className="grid gap-6">
+      {/* dashboard-only backdrop: a dusk-lagoon wash behind the glass */}
+      <div className="nv-dash-scene" aria-hidden />
       {/* greeting + quick actions */}
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>

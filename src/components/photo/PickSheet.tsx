@@ -24,7 +24,7 @@ export function PickSheet({ open, busy, photos, usedIds, onPick, onUpload, onClo
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Add a photo to the grid">
       <button className="absolute inset-0 bg-black/40" aria-label="Close" onClick={onClose} />
-      <div className="absolute inset-x-0 bottom-0 max-h-[75dvh] rounded-t-(--nv-radius-lg) bg-surface border-t border-border shadow-xl
+      <div className="absolute inset-x-0 bottom-0 max-h-[75dvh] rounded-t-(--nv-radius-lg) bg-surface nv-glass border-t border-border shadow-xl
                       flex flex-col pb-[env(safe-area-inset-bottom)] desktop:max-w-xl desktop:mx-auto desktop:rounded-(--nv-radius-lg) desktop:bottom-8">
         <div className="flex items-center gap-2 px-4 pt-3 pb-2 shrink-0">
           <span className="font-display font-semibold text-ink flex-1">Add to grid</span>

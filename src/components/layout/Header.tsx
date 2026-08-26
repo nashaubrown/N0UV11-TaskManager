@@ -34,7 +34,7 @@ export function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-30 h-14 bg-surface/90 backdrop-blur border-b border-border flex items-center gap-3 px-4">
+    <header className="sticky top-0 z-30 h-14 bg-surface nv-glass border-b border-border flex items-center gap-3 px-4">
       <Button
         variant="ghost" size="sm" className="desktop:hidden"
         aria-label="Open menu" onClick={() => setSidebarOpen(true)}
@@ -80,7 +80,7 @@ export function Header() {
             </button>
             {menuOpen && (
               <div
-                className="absolute right-0 top-full mt-2 w-48 rounded-(--nv-radius-md) border border-border bg-surface shadow-lg p-1.5 z-50"
+                className="absolute right-0 top-full mt-2 w-48 rounded-(--nv-radius-md) border border-border bg-surface nv-glass shadow-lg p-1.5 z-50"
                 onMouseLeave={() => setMenuOpen(false)}
               >
                 <p className="px-2.5 py-1.5 text-sm">
