@@ -13,11 +13,13 @@
   --nv-gradient-soft: linear-gradient(135deg, rgba(255, 107, 91, 0.12) 0%, rgba(196, 30, 58, 0.12) 100%);
   --nv-chart-line: #e84b33; /* 3.8:1 on white — chart strokes only */
 
-  /* Surfaces & ink (light) */
-  --nv-bg: #f9f8f7;          /* app background — NOUVII off-white   */
-  --nv-surface: #ffffff;     /* cards, panels                        */
-  --nv-surface-2: #f1f0ee;   /* nested / hover surfaces              */
-  --nv-border: #e8e7e5;      /* hairlines                            */
+  /* Surfaces & ink (light) — deep-glass: surfaces are frosted panes over
+     the aurora the body paints; .nv-glass adds the backdrop blur. */
+  --nv-bg: #f7f4f2;          /* base under the aurora wash           */
+  --nv-surface: rgba(255, 255, 255, 0.62);  /* cards, panels         */
+  --nv-surface-2: rgba(255, 255, 255, 0.5); /* nested / hover        */
+  --nv-border: rgba(146, 116, 106, 0.16);   /* hairlines             */
+  --nv-blur: 18px;           /* frost strength (reduced on phones)   */
   --nv-ink: #1a1a1a;         /* primary text                         */
   --nv-ink-2: #333333;       /* headings on tinted surfaces          */
   --nv-ink-muted: #6b6b6b;   /* secondary text (AA on bg/surface)    */
@@ -52,11 +54,12 @@
   --nv-radius-lg: 16px;
   --nv-radius-full: 999px;
 
-  /* Elevation */
-  --nv-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --nv-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-  --nv-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.15);
-  --nv-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.2);
+  /* Elevation — each level carries the glass top-edge highlight */
+  --nv-glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --nv-shadow-sm: 0 1px 2px rgba(90, 60, 52, 0.06), 0 8px 28px rgba(90, 60, 52, 0.07), var(--nv-glass-edge);
+  --nv-shadow-md: 0 4px 6px rgba(90, 60, 52, 0.09), 0 10px 32px rgba(90, 60, 52, 0.09), var(--nv-glass-edge);
+  --nv-shadow-lg: 0 10px 15px rgba(90, 60, 52, 0.12), 0 16px 40px rgba(90, 60, 52, 0.1), var(--nv-glass-edge);
+  --nv-shadow-xl: 0 20px 25px rgba(90, 60, 52, 0.16), 0 24px 56px rgba(90, 60, 52, 0.12), var(--nv-glass-edge);
 
   /* Motion */
   --nv-ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -69,10 +72,10 @@
 /* Dark theme — explicit choice */
 [data-theme='dark'] {
   --nv-chart-line: #ff6b5b;
-  --nv-bg: #131212;
-  --nv-surface: #1e1d1c;
-  --nv-surface-2: #2a2928;
-  --nv-border: #383736;
+  --nv-bg: #161311;
+  --nv-surface: rgba(34, 30, 28, 0.55);
+  --nv-surface-2: rgba(255, 255, 255, 0.06);
+  --nv-border: rgba(255, 255, 255, 0.13);
   --nv-ink: #f5f4f2;
   --nv-ink-2: #e8e7e5;
   --nv-ink-muted: #a8a7a5;
@@ -85,9 +88,27 @@
   --nv-warning-bg: rgba(255, 179, 64, 0.14);
   --nv-error-bg: rgba(255, 105, 97, 0.14);
   --nv-info-bg: rgba(100, 168, 255, 0.14);
-  --nv-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --nv-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.45);
-  --nv-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
-  --nv-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.55);
+  --nv-glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --nv-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 30px rgba(0, 0, 0, 0.3), var(--nv-glass-edge);
+  --nv-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.45), 0 10px 34px rgba(0, 0, 0, 0.32), var(--nv-glass-edge);
+  --nv-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5), 0 16px 44px rgba(0, 0, 0, 0.35), var(--nv-glass-edge);
+  --nv-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.55), 0 24px 60px rgba(0, 0, 0, 0.4), var(--nv-glass-edge);
   color-scheme: dark;
+}
+
+/* Phones get a lighter frost — backdrop blur is GPU-expensive there */
+@media (max-width: 767px) {
+  :root { --nv-blur: 10px; }
+}
+
+/* No backdrop-filter support → surfaces go (nearly) opaque so text stays crisp */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --nv-surface: rgba(255, 255, 255, 0.94);
+    --nv-surface-2: rgba(250, 248, 246, 0.94);
+  }
+  [data-theme='dark'] {
+    --nv-surface: rgba(34, 30, 28, 0.96);
+    --nv-surface-2: rgba(48, 43, 40, 0.96);
+  }
 }

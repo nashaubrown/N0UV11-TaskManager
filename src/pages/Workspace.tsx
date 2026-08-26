@@ -97,7 +97,7 @@ export default function Workspace() {
   ]
 
   return (
-    <div className="flex gap-0 h-[calc(100dvh-9.5rem)] min-h-[480px] -mx-1 rounded-(--nv-radius-lg) border border-border bg-surface overflow-hidden">
+    <div className="flex gap-0 h-[calc(100dvh-9.5rem)] min-h-[480px] -mx-1 rounded-(--nv-radius-lg) border border-border bg-surface nv-glass overflow-hidden">
       {/* tree sidebar */}
       <nav className="w-60 shrink-0 border-r border-border overflow-y-auto py-2" aria-label="Workspace tree">
         <p className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">Workspace</p>
@@ -184,7 +184,7 @@ export default function Workspace() {
                 {!isUnfiled && <div className="relative">
                   <Button variant="ghost" size="sm" aria-label="List menu" icon={<MoreHorizontal className="size-4" />} onClick={() => setMenuOpen((o) => !o)} />
                   {menuOpen && (
-                    <div className="absolute z-20 mt-1 w-40 rounded-(--nv-radius-md) border border-border bg-surface shadow-lg py-1 text-sm">
+                    <div className="absolute z-20 mt-1 w-40 rounded-(--nv-radius-md) border border-border bg-surface nv-glass shadow-lg py-1 text-sm">
                       <button className="w-full text-left px-3 py-1.5 hover:bg-surface-2 text-ink"
                               onClick={() => { setRenaming(true); setRenameDraft(selected.name); setMenuOpen(false) }}>
                         Rename list
@@ -213,7 +213,7 @@ export default function Workspace() {
                     Fields
                   </Button>
                   {fieldsOpen && (
-                    <div className="absolute right-0 z-20 mt-1 w-64 rounded-(--nv-radius-md) border border-border bg-surface shadow-lg p-3 grid gap-2">
+                    <div className="absolute right-0 z-20 mt-1 w-64 rounded-(--nv-radius-md) border border-border bg-surface nv-glass shadow-lg p-3 grid gap-2">
                       <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Custom fields</p>
                       {selected.fields.length === 0 && <p className="text-xs text-ink-muted">No fields yet — every task in this list will get the fields you add.</p>}
                       {selected.fields.map((f) => (

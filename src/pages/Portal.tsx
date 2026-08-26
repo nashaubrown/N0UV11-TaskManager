@@ -258,7 +258,7 @@ export default function Portal({ token }: { token: string }) {
           >
             <motion.div
               initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 10 }}
-              className="bg-surface rounded-(--nv-radius-lg) shadow-xl max-w-3xl w-full max-h-[92dvh] overflow-y-auto"
+              className="bg-surface nv-glass rounded-(--nv-radius-lg) shadow-xl max-w-3xl w-full max-h-[92dvh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-label={open.title ?? 'Photo review'}

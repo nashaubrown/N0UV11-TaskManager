@@ -198,8 +198,8 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
   }
 
   return (
-    <aside className="w-[400px] shrink-0 border-l border-border bg-surface h-full overflow-y-auto" aria-label="Task details">
-      <div className="sticky top-0 z-10 bg-surface border-b border-border px-4 py-3 flex items-center gap-2">
+    <aside className="w-[400px] shrink-0 border-l border-border bg-surface nv-glass h-full overflow-y-auto" aria-label="Task details">
+      <div className="sticky top-0 z-10 bg-surface nv-glass border-b border-border px-4 py-3 flex items-center gap-2">
         <Badge tone={TASK_STATUS_META[task.status].tone}>{TASK_STATUS_META[task.status].label}</Badge>
         <span className="flex-1" />
         {confirmDelete ? (

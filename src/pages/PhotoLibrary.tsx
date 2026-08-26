@@ -498,7 +498,7 @@ export default function PhotoLibrary() {
       </div>
 
       {/* mobile: Instagram-style segmented tabs — one surface at a time */}
-      <div className="desktop:hidden flex rounded-full border border-border p-0.5 bg-surface" role="tablist" aria-label="Library views">
+      <div className="desktop:hidden flex rounded-full border border-border p-0.5 bg-surface nv-glass" role="tablist" aria-label="Library views">
         {([['library', 'Library'], ['grid', 'Grid builder']] as const).map(([tab, label]) => (
           <button key={tab} role="tab" aria-selected={mobileTab === tab} onClick={() => setMobileTab(tab)}
                   className={clsx('flex-1 rounded-full py-1.5 text-sm font-medium transition-colors',
@@ -510,7 +510,7 @@ export default function PhotoLibrary() {
 
       <div className="desktop:grid desktop:grid-cols-[240px_minmax(360px,44%)_1fr] desktop:gap-5 desktop:items-start">
         {/* filter panel — sidebar on desktop, drawer on mobile */}
-        <aside className="hidden desktop:block sticky top-20 rounded-(--nv-radius-lg) border border-border bg-surface p-4">
+        <aside className="hidden desktop:block sticky top-20 rounded-(--nv-radius-lg) border border-border bg-surface nv-glass p-4">
           {filterPanel}
         </aside>
 
@@ -518,7 +518,7 @@ export default function PhotoLibrary() {
         <section
           className={clsx(
             mobileTab === 'grid' ? 'grid' : 'hidden desktop:grid',
-            'desktop:sticky top-20 rounded-(--nv-radius-lg) border border-border bg-surface p-4 gap-3 content-start mb-4 desktop:mb-0',
+            'desktop:sticky top-20 rounded-(--nv-radius-lg) border border-border bg-surface nv-glass p-4 gap-3 content-start mb-4 desktop:mb-0',
           )}
           aria-label="Grid builder">
           <div className="flex items-center gap-2">
@@ -635,7 +635,7 @@ export default function PhotoLibrary() {
             <motion.div
               initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
               transition={{ type: 'spring', damping: 30, stiffness: 350 }}
-              className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-surface shadow-xl p-4 overflow-y-auto"
+              className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-surface nv-glass shadow-xl p-4 overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
               role="dialog" aria-label="Photo filters"
             >
@@ -676,7 +676,7 @@ export default function PhotoLibrary() {
             initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }}
             transition={{ type: 'spring', damping: 26, stiffness: 300 }}
             className="fixed bottom-20 desktop:bottom-6 left-1/2 -translate-x-1/2 z-40
-                       bg-surface border border-border shadow-xl rounded-full px-4 py-2 flex items-center gap-2"
+                       bg-surface nv-glass border border-border shadow-xl rounded-full px-4 py-2 flex items-center gap-2"
           >
             <span className="text-sm font-medium text-ink px-1 tabular-nums">{selectedPhotoIds.length} selected</span>
             <Button variant="secondary" size="sm" icon={<Download className="size-4" />}>Download</Button>

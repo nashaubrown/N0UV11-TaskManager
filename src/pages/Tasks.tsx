@@ -109,7 +109,7 @@ export default function Tasks() {
     setClosed((c) => { const n = new Set(c); n.has(s) ? n.delete(s) : n.add(s); return n })
 
   return (
-    <div className="flex gap-0 h-[calc(100dvh-9.5rem)] min-h-[480px] -mx-1 rounded-(--nv-radius-lg) border border-border bg-surface overflow-hidden">
+    <div className="flex gap-0 h-[calc(100dvh-9.5rem)] min-h-[480px] -mx-1 rounded-(--nv-radius-lg) border border-border bg-surface nv-glass overflow-hidden">
       <div className="flex-1 min-w-0 flex flex-col">
         <div className="border-b border-border px-4 pt-3 pb-0 grid gap-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">

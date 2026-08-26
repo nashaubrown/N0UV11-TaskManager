@@ -51,7 +51,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
             exit={{ y: 24, opacity: 0, scale: 0.98 }}
             transition={{ type: 'spring', damping: 28, stiffness: 320 }}
             className={clsx(
-              'relative w-full bg-surface border border-border shadow-xl flex flex-col max-h-[92dvh]',
+              'relative w-full bg-surface nv-glass border border-border shadow-xl flex flex-col max-h-[92dvh]',
               'rounded-t-(--nv-radius-lg) tablet:rounded-(--nv-radius-lg)',
               sizes[size],
             )}
