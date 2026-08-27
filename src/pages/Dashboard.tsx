@@ -224,8 +224,8 @@ export default function Dashboard() {
       {/* KPI strip */}
       <div className="grid grid-cols-2 tablet:grid-cols-3 desktop:grid-cols-5 gap-3">
         <StatTile label="Open tasks" value={String(open.length)} icon={<Clock />} spark={spark} to="/tasks" />
-        <StatTile label="Overdue" value={String(overdueCount)} icon={<AlertTriangle />} to="/tasks?filter=overdue" />
-        <StatTile label="Blocked" value={String(blockedIds.size)} icon={<GitBranch />} to="/tasks?filter=blocked" />
+        <StatTile label="Overdue" value={String(overdueCount)} icon={<AlertTriangle />} to="/tasks?filter=overdue" alert={overdueCount > 0} />
+        <StatTile label="Blocked" value={String(blockedIds.size)} icon={<GitBranch />} to="/tasks?filter=blocked" alert={blockedIds.size > 0} />
         <StatTile label="Awaiting approval" value={String(pendingApproval.length)} icon={<CheckCircle2 />} to="/photos?status=needs_review" />
         <StatTile label="Time tracked" value={trackedTotal ? fmtDuration(trackedTotal) : '0m'} icon={<Clock />} to="/tasks" />
       </div>
