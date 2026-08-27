@@ -116,6 +116,13 @@ body::before {
   to { --nv-sweep: 360deg; }
 }
 
+/* Attention pulse: a tile that needs eyes (overdue, blocked) runs the sweep
+   on its own, slower and softer than the hover state. */
+.nv-card-alert::after {
+  opacity: 0.8;
+  animation: nv-sweep 4.5s linear infinite;
+}
+
 /* Dashboard-only scene: a dusk-lagoon wash behind the glass, like a photo
    backdrop without shipping one. Sits above the aurora, below the UI. */
 .nv-dash-scene {

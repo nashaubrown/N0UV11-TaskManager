@@ -7,7 +7,7 @@ import { Card } from './Card'
  *  period · optional sparkline. Value/labels use text tokens, never series
  *  color; delta color = direction × whether up is good. Give it `to` and the
  *  whole tile becomes a link (with the interactive gradient edge). */
-export function StatTile({ label, value, delta, deltaGood, deltaPeriod = 'last week', icon, spark, to }: {
+export function StatTile({ label, value, delta, deltaGood, deltaPeriod = 'last week', icon, spark, to, alert }: {
   label: string
   value: string
   delta?: number
@@ -16,9 +16,11 @@ export function StatTile({ label, value, delta, deltaGood, deltaPeriod = 'last w
   icon?: ReactNode
   spark?: number[]
   to?: string
+  /** Run the gradient edge on its own — for counts that need attention. */
+  alert?: boolean
 }) {
   const tile = (
-    <Card padding="md" interactive={Boolean(to)} className="flex flex-col gap-1 min-w-0 h-full">
+    <Card padding="md" interactive={Boolean(to)} className={clsx('flex flex-col gap-1 min-w-0 h-full', alert && 'nv-card-alert')}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm text-ink-muted truncate">{label}</span>
         {icon && <span className="text-ink-faint [&>svg]:size-4 shrink-0">{icon}</span>}

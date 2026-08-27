@@ -29,7 +29,7 @@ function DealCard({ deal, onMove, onDragStart, onDragEnd, dragging }: {
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className={clsx(
-        'rounded-(--nv-radius-md) border border-border bg-surface p-3 grid gap-1.5 shadow-sm',
+        'rounded-(--nv-radius-md) border border-border bg-surface nv-glass nv-card-link p-3 grid gap-1.5 shadow-sm',
         'cursor-grab active:cursor-grabbing',
         dragging && 'opacity-40',
       )}

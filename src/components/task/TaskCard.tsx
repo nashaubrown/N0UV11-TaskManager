@@ -20,7 +20,7 @@ export function TaskCard({ task, onClick }: { task: Task; onClick?: (task: Task)
       whileHover={{ y: -2 }}
       onClick={() => onClick?.(task)}
       className={clsx(
-        'bg-surface border border-border rounded-(--nv-radius-lg) shadow-sm p-4 cursor-pointer',
+        'bg-surface nv-glass nv-card-link border border-border rounded-(--nv-radius-lg) shadow-sm p-4 cursor-pointer',
         'transition-shadow hover:shadow-md',
         task.status === 'cancelled' && 'opacity-60',
       )}

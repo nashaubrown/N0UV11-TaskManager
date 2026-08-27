@@ -12,9 +12,9 @@ export function Card({ padding = 'md', interactive, className, ...rest }: CardPr
   return (
     <div
       className={clsx(
-        'bg-surface nv-glass border border-border rounded-(--nv-radius-lg) shadow-sm',
+        'bg-surface nv-glass nv-card-link border border-border rounded-(--nv-radius-lg) shadow-sm',
         interactive &&
-          'nv-card-link transition-all duration-200 hover:shadow-md hover:-translate-y-px cursor-pointer',
+          'transition-all duration-200 hover:shadow-md hover:-translate-y-px cursor-pointer',
         pads[padding],
         className,
       )}
