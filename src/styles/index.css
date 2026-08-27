@@ -61,21 +61,26 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(60% 50% at 8% 0%, rgba(255, 107, 91, 0.14), transparent 62%),
-    radial-gradient(48% 44% at 96% 10%, rgba(196, 30, 58, 0.09), transparent 65%),
-    radial-gradient(56% 62% at 68% 102%, rgba(255, 158, 97, 0.12), transparent 60%);
+    radial-gradient(52% 44% at 6% -4%, rgba(255, 107, 91, 0.38), transparent 62%),
+    radial-gradient(44% 40% at 98% 8%, rgba(196, 30, 58, 0.26), transparent 65%),
+    radial-gradient(36% 34% at 38% 42%, rgba(255, 186, 120, 0.28), transparent 68%),
+    radial-gradient(56% 58% at 72% 104%, rgba(255, 140, 90, 0.30), transparent 60%),
+    radial-gradient(40% 42% at 4% 92%, rgba(196, 30, 58, 0.16), transparent 64%);
 }
 [data-theme='dark'] body::before {
   background:
-    radial-gradient(60% 50% at 8% 0%, rgba(255, 107, 91, 0.2), transparent 62%),
-    radial-gradient(48% 44% at 96% 10%, rgba(196, 30, 58, 0.18), transparent 65%),
-    radial-gradient(56% 62% at 68% 102%, rgba(255, 158, 97, 0.1), transparent 60%);
+    radial-gradient(52% 44% at 6% -4%, rgba(255, 107, 91, 0.28), transparent 62%),
+    radial-gradient(44% 40% at 98% 8%, rgba(196, 30, 58, 0.24), transparent 65%),
+    radial-gradient(36% 34% at 38% 42%, rgba(255, 158, 97, 0.12), transparent 68%),
+    radial-gradient(56% 58% at 72% 104%, rgba(255, 140, 90, 0.16), transparent 60%),
+    radial-gradient(40% 42% at 4% 92%, rgba(196, 30, 58, 0.14), transparent 64%);
 }
 
-/* Frosted pane — pair with bg-surface (translucent by token) */
+/* Frosted pane — pair with bg-surface (translucent by token). The saturate
+   makes whatever glows behind the pane bloom through the blur. */
 .nv-glass {
-  backdrop-filter: blur(var(--nv-blur));
-  -webkit-backdrop-filter: blur(var(--nv-blur));
+  backdrop-filter: blur(var(--nv-blur)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--nv-blur)) saturate(170%);
 }
 
 /* Dashboard-only scene: a dusk-lagoon wash behind the glass, like a photo
@@ -86,10 +91,10 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(70% 46% at 50% -6%, rgba(255, 143, 100, 0.28), transparent 62%),
-    radial-gradient(34% 22% at 72% 16%, rgba(255, 195, 130, 0.30), transparent 70%),
-    radial-gradient(90% 60% at 50% 112%, rgba(38, 108, 122, 0.30), transparent 64%),
-    radial-gradient(60% 40% at 16% 88%, rgba(20, 78, 92, 0.22), transparent 66%);
+    radial-gradient(70% 46% at 50% -6%, rgba(255, 130, 85, 0.42), transparent 62%),
+    radial-gradient(34% 22% at 72% 16%, rgba(255, 195, 130, 0.44), transparent 70%),
+    radial-gradient(90% 60% at 50% 112%, rgba(38, 108, 122, 0.42), transparent 64%),
+    radial-gradient(60% 40% at 16% 88%, rgba(20, 78, 92, 0.32), transparent 66%);
   filter: blur(6px);
 }
 [data-theme='dark'] .nv-dash-scene {

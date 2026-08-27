@@ -15,11 +15,11 @@
 
   /* Surfaces & ink (light) — deep-glass: surfaces are frosted panes over
      the aurora the body paints; .nv-glass adds the backdrop blur. */
-  --nv-bg: #f7f4f2;          /* base under the aurora wash           */
-  --nv-surface: rgba(255, 255, 255, 0.62);  /* cards, panels         */
-  --nv-surface-2: rgba(255, 255, 255, 0.5); /* nested / hover        */
-  --nv-border: rgba(146, 116, 106, 0.16);   /* hairlines             */
-  --nv-blur: 18px;           /* frost strength (reduced on phones)   */
+  --nv-bg: #f6f1ee;          /* base under the aurora wash           */
+  --nv-surface: rgba(255, 255, 255, 0.44);  /* cards, panels         */
+  --nv-surface-2: rgba(255, 255, 255, 0.38);/* nested / hover        */
+  --nv-border: rgba(255, 255, 255, 0.55);   /* glass edges           */
+  --nv-blur: 24px;           /* frost strength (reduced on phones)   */
   --nv-ink: #1a1a1a;         /* primary text                         */
   --nv-ink-2: #333333;       /* headings on tinted surfaces          */
   --nv-ink-muted: #6b6b6b;   /* secondary text (AA on bg/surface)    */
@@ -73,9 +73,9 @@
 [data-theme='dark'] {
   --nv-chart-line: #ff6b5b;
   --nv-bg: #161311;
-  --nv-surface: rgba(34, 30, 28, 0.55);
+  --nv-surface: rgba(36, 31, 29, 0.45);
   --nv-surface-2: rgba(255, 255, 255, 0.06);
-  --nv-border: rgba(255, 255, 255, 0.13);
+  --nv-border: rgba(255, 255, 255, 0.16);
   --nv-ink: #f5f4f2;
   --nv-ink-2: #e8e7e5;
   --nv-ink-muted: #a8a7a5;

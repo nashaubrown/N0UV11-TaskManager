@@ -132,11 +132,35 @@ export default function Dashboard() {
 
   /* ---------- activity ---------- */
   const activity = useMemo(() => {
+    // raw camera/export filenames (long hex blobs) read as noise, not names
+    const cleanTitle = (t?: string) => {
+      const s = t?.trim()
+      if (!s) return null
+      if (s.length >= 12 && /^[0-9a-f_-]+$/i.test(s)) return null
+      return s.length > 42 ? `${s.slice(0, 42)}…` : s
+    }
+    // one line per upload batch (same person, same hour), not one per photo
+    const batches = new Map<string, { at: string; who?: string; count: number; sample: string | null }>()
+    for (const p of photos) {
+      const key = `${p.uploadedBy?.id ?? '?'}:${p.createdAt.slice(0, 13)}`
+      const b = batches.get(key)
+      if (b) {
+        b.count += 1
+        if (p.createdAt > b.at) b.at = p.createdAt
+        b.sample ??= cleanTitle(p.title)
+      } else {
+        batches.set(key, { at: p.createdAt, who: p.uploadedBy?.fullName, count: 1, sample: cleanTitle(p.title) })
+      }
+    }
     const events: { at: string; who?: string; text: string }[] = [
       ...tasks
         .filter((t) => t.completedAt)
         .map((t) => ({ at: t.completedAt!, who: t.assignees[0]?.fullName, text: `completed “${t.title}”` })),
-      ...photos.map((p) => ({ at: p.createdAt, who: p.uploadedBy?.fullName, text: `uploaded “${p.title ?? 'a photo'}”` })),
+      ...[...batches.values()].map((b) => ({
+        at: b.at,
+        who: b.who,
+        text: b.count === 1 ? `uploaded “${b.sample ?? 'a photo'}”` : `uploaded ${b.count} photos`,
+      })),
       ...shoots.map((sh) => ({ at: sh.createdAt, text: `scheduled 📸 ${sh.title}` })),
     ]
     return events.filter((e) => e.at).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8)
@@ -356,8 +380,8 @@ export default function Dashboard() {
           ) : (
             <ul className="grid gap-2 mt-2">
               {activity.map((e, i) => (
-                <li key={i} className="flex items-baseline gap-2 text-sm">
-                  <span className="text-ink-2 min-w-0 truncate">
+                <li key={i} className="flex items-baseline gap-2 text-sm min-w-0">
+                  <span className="text-ink-2 flex-1 min-w-0 truncate">
                     {e.who && <span className="font-medium text-ink">{e.who.split(' ')[0]} </span>}
                     {e.text}
                   </span>
