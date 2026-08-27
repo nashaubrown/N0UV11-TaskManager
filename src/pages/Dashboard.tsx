@@ -223,11 +223,11 @@ export default function Dashboard() {
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 tablet:grid-cols-3 desktop:grid-cols-5 gap-3">
-        <StatTile label="Open tasks" value={String(open.length)} icon={<Clock />} spark={spark} />
-        <StatTile label="Overdue" value={String(overdueCount)} icon={<AlertTriangle />} />
-        <StatTile label="Blocked" value={String(blockedIds.size)} icon={<GitBranch />} />
-        <StatTile label="Awaiting approval" value={String(pendingApproval.length)} icon={<CheckCircle2 />} />
-        <StatTile label="Time tracked" value={trackedTotal ? fmtDuration(trackedTotal) : '0m'} icon={<Clock />} />
+        <StatTile label="Open tasks" value={String(open.length)} icon={<Clock />} spark={spark} to="/tasks" />
+        <StatTile label="Overdue" value={String(overdueCount)} icon={<AlertTriangle />} to="/tasks?filter=overdue" />
+        <StatTile label="Blocked" value={String(blockedIds.size)} icon={<GitBranch />} to="/tasks?filter=blocked" />
+        <StatTile label="Awaiting approval" value={String(pendingApproval.length)} icon={<CheckCircle2 />} to="/photos?status=needs_review" />
+        <StatTile label="Time tracked" value={trackedTotal ? fmtDuration(trackedTotal) : '0m'} icon={<Clock />} to="/tasks" />
       </div>
 
       {/* my work + shoot rail */}
@@ -265,7 +265,7 @@ export default function Dashboard() {
         </Card>
 
         <div className="desktop:col-span-2 grid gap-6">
-          <Card padding="lg">
+          <Card padding="lg" interactive onClick={() => navigate('/calendar')}>
             <div className="flex items-baseline justify-between">
               <CardHeader title="Up next" subtitle="Photoshoots" />
               <Link to="/calendar" className="text-sm font-medium text-brand-deep dark:text-brand hover:underline">Calendar →</Link>
@@ -329,7 +329,7 @@ export default function Dashboard() {
         </div>
         <div className="grid tablet:grid-cols-2 desktop:grid-cols-3 gap-3">
           {merchantStats.map(({ merchant: m, open: mOpen, overdue, blocked, nextShoot, thumbs }) => (
-            <Card key={m.id} padding="md" className="grid gap-2.5 content-start">
+            <Card key={m.id} padding="md" interactive onClick={() => navigate(`/merchants/${m.id}`)} className="grid gap-2.5 content-start">
               <div className="flex items-center gap-2">
                 <Store className="size-4 text-brand-deep dark:text-brand shrink-0" aria-hidden />
                 <Link to={`/merchants/${m.id}`} className="font-medium text-ink truncate hover:underline flex-1">{m.name}</Link>
@@ -395,7 +395,7 @@ export default function Dashboard() {
 
       {/* approvals + deals */}
       <div className="grid desktop:grid-cols-5 gap-6 items-start">
-        <Card padding="lg" className="desktop:col-span-3">
+        <Card padding="lg" interactive onClick={() => navigate('/photos?status=needs_review')} className="desktop:col-span-3">
           <div className="flex items-baseline justify-between">
             <CardHeader title="Approvals queue" subtitle={pendingApproval.length ? `${pendingApproval.length} photo${pendingApproval.length === 1 ? '' : 's'} waiting` : 'All clear'} />
             <Link to="/photos" className="text-sm font-medium text-brand-deep dark:text-brand hover:underline">Review →</Link>
@@ -414,7 +414,7 @@ export default function Dashboard() {
             </div>
           )}
         </Card>
-        <Card padding="lg" className="desktop:col-span-2">
+        <Card padding="lg" interactive onClick={() => navigate('/deals')} className="desktop:col-span-2">
           <div className="flex items-baseline justify-between">
             <CardHeader title="Deals" subtitle="Pipeline snapshot" />
             <Link to="/deals" className="text-sm font-medium text-brand-deep dark:text-brand hover:underline">Board →</Link>

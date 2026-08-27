@@ -86,7 +86,11 @@ export default function PhotoLibrary() {
     const m = searchParams.get('merchantId')
     return new Set(m ? [m] : [])
   })
-  const [statusSel, setStatusSel] = useState<Set<StatusKey>>(new Set())
+  const [statusSel, setStatusSel] = useState<Set<StatusKey>>(() => {
+    // the dashboard's approval tiles deep-link here pre-filtered
+    const s = searchParams.get('status')
+    return new Set(s && s in STATUS_MATCH ? [s as StatusKey] : [])
+  })
   const [aiOnly, setAiOnly] = useState(false)
   const [grouped, setGrouped] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)

@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
+import { Link } from 'react-router-dom'
 import { Card } from './Card'
 
 /** Dashboard stat tile: label · value · optional signed delta vs a named
  *  period · optional sparkline. Value/labels use text tokens, never series
- *  color; delta color = direction × whether up is good. */
-export function StatTile({ label, value, delta, deltaGood, deltaPeriod = 'last week', icon, spark }: {
+ *  color; delta color = direction × whether up is good. Give it `to` and the
+ *  whole tile becomes a link (with the interactive gradient edge). */
+export function StatTile({ label, value, delta, deltaGood, deltaPeriod = 'last week', icon, spark, to }: {
   label: string
   value: string
   delta?: number
@@ -13,9 +15,10 @@ export function StatTile({ label, value, delta, deltaGood, deltaPeriod = 'last w
   deltaPeriod?: string
   icon?: ReactNode
   spark?: number[]
+  to?: string
 }) {
-  return (
-    <Card padding="md" className="flex flex-col gap-1 min-w-0">
+  const tile = (
+    <Card padding="md" interactive={Boolean(to)} className="flex flex-col gap-1 min-w-0 h-full">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm text-ink-muted truncate">{label}</span>
         {icon && <span className="text-ink-faint [&>svg]:size-4 shrink-0">{icon}</span>}
@@ -31,6 +34,7 @@ export function StatTile({ label, value, delta, deltaGood, deltaPeriod = 'last w
       )}
     </Card>
   )
+  return to ? <Link to={to} className="block min-w-0" aria-label={`${label}: ${value}`}>{tile}</Link> : tile
 }
 
 function Sparkline({ points }: { points: number[] }) {
