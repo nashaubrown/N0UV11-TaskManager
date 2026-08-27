@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { addDays, format, startOfDay } from 'date-fns'
 import { ChevronDown, Download, Flag, Plus, Search } from 'lucide-react'
 import clsx from 'clsx'
@@ -27,11 +28,15 @@ const PRIORITY_COLOR: Record<Task['priority'], string> = {
 export default function Tasks() {
   const { tasks, lists, merchants, addTask } = useData()
   const { user } = useAuth()
+  const [params] = useSearchParams()
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
   const [listFilter, setListFilter] = useState('')
   const [mineOnly, setMineOnly] = useState(false)
   const [dueSoon, setDueSoon] = useState(false)
+  // dashboard tiles deep-link here with the filter already applied
+  const [overdueOnly, setOverdueOnly] = useState(() => params.get('filter') === 'overdue')
+  const [blockedOnly, setBlockedOnly] = useState(() => params.get('filter') === 'blocked')
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [newListId, setNewListId] = useState('')
@@ -51,20 +56,6 @@ export default function Tasks() {
     ...(lists.some((l) => !l.merchantId) ? [{ label: 'Other lists', lists: lists.filter((l) => !l.merchantId) }] : []),
   ]
 
-  const weekEnd = addDays(startOfDay(new Date()), 7)
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return tasks.filter((t) =>
-      !t.parentTaskId &&
-      (filter === 'all' || t.status === filter) &&
-      (!q || t.title.toLowerCase().includes(q)) &&
-      (!listFilter || (listFilter === 'unfiled' ? !t.listId : t.listId === listFilter)) &&
-      (!mineOnly || t.assignees.some((a) => a.id === user?.id)) &&
-      (!dueSoon || (t.dueAt ? new Date(t.dueAt) <= weekEnd && t.status !== 'completed' && t.status !== 'cancelled' : false)),
-    )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks, filter, query, listFilter, mineOnly, dueSoon, user?.id])
-
   const roots = tasks.filter((t) => !t.parentTaskId)
   const blockedIds = useMemo(() => {
     const stillOpen = (id: string) => {
@@ -73,6 +64,24 @@ export default function Tasks() {
     }
     return new Set(tasks.filter((t) => (t.dependsOnIds ?? []).some(stillOpen)).map((t) => t.id))
   }, [tasks])
+
+  const weekEnd = addDays(startOfDay(new Date()), 7)
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const now = new Date()
+    const isOpen = (t: Task) => t.status !== 'completed' && t.status !== 'cancelled'
+    return tasks.filter((t) =>
+      !t.parentTaskId &&
+      (filter === 'all' || t.status === filter) &&
+      (!q || t.title.toLowerCase().includes(q)) &&
+      (!listFilter || (listFilter === 'unfiled' ? !t.listId : t.listId === listFilter)) &&
+      (!mineOnly || t.assignees.some((a) => a.id === user?.id)) &&
+      (!dueSoon || (t.dueAt ? new Date(t.dueAt) <= weekEnd && isOpen(t) : false)) &&
+      (!overdueOnly || (t.dueAt ? new Date(t.dueAt) < now && isOpen(t) : false)) &&
+      (!blockedOnly || blockedIds.has(t.id)),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, filter, query, listFilter, mineOnly, dueSoon, overdueOnly, blockedOnly, blockedIds, user?.id])
   const counts = (s: Filter) => (s === 'all' ? roots.length : roots.filter((t) => t.status === s).length)
 
   const groups = STATUS_ORDER.map((s) => ({ status: s, tasks: filtered.filter((t) => t.status === s) }))
@@ -147,6 +156,16 @@ export default function Tasks() {
                     className={clsx('rounded-full border px-3 py-1.5 text-sm transition-colors',
                       dueSoon ? 'border-brand/50 bg-coral/10 text-ink font-medium' : 'border-border text-ink-muted hover:bg-surface-2')}>
               Due this week
+            </button>
+            <button aria-pressed={overdueOnly} onClick={() => setOverdueOnly((v) => !v)}
+                    className={clsx('rounded-full border px-3 py-1.5 text-sm transition-colors',
+                      overdueOnly ? 'border-error/50 bg-error-bg text-error font-medium' : 'border-border text-ink-muted hover:bg-surface-2')}>
+              Overdue
+            </button>
+            <button aria-pressed={blockedOnly} onClick={() => setBlockedOnly((v) => !v)}
+                    className={clsx('rounded-full border px-3 py-1.5 text-sm transition-colors',
+                      blockedOnly ? 'border-warning/50 bg-warning-bg text-warning font-medium' : 'border-border text-ink-muted hover:bg-surface-2')}>
+              Blocked
             </button>
           </div>
 

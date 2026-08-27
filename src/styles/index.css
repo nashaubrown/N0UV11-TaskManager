@@ -83,6 +83,39 @@ body::before {
   -webkit-backdrop-filter: blur(var(--nv-blur)) saturate(170%);
 }
 
+/* Interactive cards: on hover/focus a coral→deep gradient traces the card
+   edge and sweeps around it. Masked ring so the glass fill stays untouched. */
+@property --nv-sweep {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.nv-card-link { position: relative; }
+.nv-card-link::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(from var(--nv-sweep), var(--nv-coral), var(--nv-deep-red), var(--nv-coral));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--nv-dur) var(--nv-ease);
+  pointer-events: none;
+}
+.nv-card-link:hover::after,
+.nv-card-link:focus-visible::after,
+.nv-card-link:focus-within::after {
+  opacity: 1;
+  animation: nv-sweep 2.6s linear infinite;
+}
+@keyframes nv-sweep {
+  to { --nv-sweep: 360deg; }
+}
+
 /* Dashboard-only scene: a dusk-lagoon wash behind the glass, like a photo
    backdrop without shipping one. Sits above the aurora, below the UI. */
 .nv-dash-scene {
